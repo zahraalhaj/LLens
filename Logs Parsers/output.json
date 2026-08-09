@@ -1,0 +1,37 @@
+[
+  {
+    "timestamp": "1/7/2026 9:01:25 AM",
+    "correlation_id": null,
+    "log_type": "INFO",
+    "action": "Tracking ID: -15120260107090124843--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).\n   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)\n   at System.Net.CommandStream.Dispose(Boolean disposing)\n   at System.IO.Stream.Close()\n   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)\n   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)\n   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)\n   at System.Net.FtpWebRequest.GetRequestStream()\n   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\\Shahid\\Development\\GIT\\AFSMW\\ASBB\\MWDC\\ASBBMobileDebitService\\PostalionWebService.asmx.cs:line 1909",
+    "details": {}
+  },
+  {
+    "timestamp": "1/7/2026 9:01:54 AM",
+    "correlation_id": null,
+    "log_type": "INFO",
+    "action": "Tracking ID: -15120260107090152986--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).\n   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)\n   at System.Net.CommandStream.Dispose(Boolean disposing)\n   at System.IO.Stream.Close()\n   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)\n   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)\n   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)\n   at System.Net.FtpWebRequest.GetRequestStream()\n   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\\Shahid\\Development\\GIT\\AFSMW\\ASBB\\MWDC\\ASBBMobileDebitService\\PostalionWebService.asmx.cs:line 1909",
+    "details": {}
+  },
+  {
+    "timestamp": "1/7/2026 9:04:55 AM",
+    "correlation_id": null,
+    "log_type": "INFO",
+    "action": "Tracking ID: -15120260107090453756--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).\n   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)\n   at System.Net.CommandStream.Dispose(Boolean disposing)\n   at System.IO.Stream.Close()\n   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)\n   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)\n   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)\n   at System.Net.FtpWebRequest.GetRequestStream()\n   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\\Shahid\\Development\\GIT\\AFSMW\\ASBB\\MWDC\\ASBBMobileDebitService\\PostalionWebService.asmx.cs:line 1909",
+    "details": {}
+  },
+  {
+    "timestamp": "1/7/2026 9:10:49 AM",
+    "correlation_id": null,
+    "log_type": "INFO",
+    "action": "Tracking ID: -15120260107091047965--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).\n   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)\n   at System.Net.CommandStream.Dispose(Boolean disposing)\n   at System.IO.Stream.Close()\n   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)\n   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)\n   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)\n   at System.Net.FtpWebRequest.GetRequestStream()\n   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\\Shahid\\Development\\GIT\\AFSMW\\ASBB\\MWDC\\ASBBMobileDebitService\\PostalionWebService.asmx.cs:line 1909",
+    "details": {}
+  },
+  {
+    "timestamp": "1/7/2026 9:20:51 AM",
+    "correlation_id": null,
+    "log_type": "INFO",
+    "action": "Tracking ID: -15120260107092049403--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).\n   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)\n   at System.Net.CommandStream.Dispose(Boolean disposing)\n   at System.IO.Stream.Close()\n   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)\n   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)\n   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)\n   at System.Net.FtpWebRequest.GetRequestStream()\n   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\\Shahid\\Development\\GIT\\AFSMW\\ASBB\\MWDC\\ASBBMobileDebitService\\PostalionWebService.asmx.cs:line 1909",
+    "details": {}
+  }
+]

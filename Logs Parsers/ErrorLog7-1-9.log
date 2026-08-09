@@ -1,0 +1,50 @@
+1/7/2026 9:01:25 AM  ->Tracking ID: -15120260107090124843--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).
+   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)
+   at System.Net.CommandStream.Dispose(Boolean disposing)
+   at System.IO.Stream.Close()
+   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)
+   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)
+   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)
+   at System.Net.FtpWebRequest.GetRequestStream()
+   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\Shahid\Development\GIT\AFSMW\ASBB\MWDC\ASBBMobileDebitService\PostalionWebService.asmx.cs:line 1909
+
+1/7/2026 9:01:54 AM  ->Tracking ID: -15120260107090152986--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).
+   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)
+   at System.Net.CommandStream.Dispose(Boolean disposing)
+   at System.IO.Stream.Close()
+   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)
+   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)
+   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)
+   at System.Net.FtpWebRequest.GetRequestStream()
+   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\Shahid\Development\GIT\AFSMW\ASBB\MWDC\ASBBMobileDebitService\PostalionWebService.asmx.cs:line 1909
+
+1/7/2026 9:04:55 AM  ->Tracking ID: -15120260107090453756--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).
+   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)
+   at System.Net.CommandStream.Dispose(Boolean disposing)
+   at System.IO.Stream.Close()
+   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)
+   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)
+   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)
+   at System.Net.FtpWebRequest.GetRequestStream()
+   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\Shahid\Development\GIT\AFSMW\ASBB\MWDC\ASBBMobileDebitService\PostalionWebService.asmx.cs:line 1909
+
+1/7/2026 9:10:49 AM  ->Tracking ID: -15120260107091047965--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).
+   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)
+   at System.Net.CommandStream.Dispose(Boolean disposing)
+   at System.IO.Stream.Close()
+   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)
+   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)
+   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)
+   at System.Net.FtpWebRequest.GetRequestStream()
+   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\Shahid\Development\GIT\AFSMW\ASBB\MWDC\ASBBMobileDebitService\PostalionWebService.asmx.cs:line 1909
+
+1/7/2026 9:20:51 AM  ->Tracking ID: -15120260107092049403--- Upload File Failed ExceptionSystem.Net.WebException: The remote server returned an error: (550) File unavailable (e.g., file not found, no access).
+   at System.Net.FtpWebRequest.SyncRequestCallback(Object obj)
+   at System.Net.CommandStream.Dispose(Boolean disposing)
+   at System.IO.Stream.Close()
+   at System.Net.ConnectionPool.Destroy(PooledStream pooledStream)
+   at System.Net.ConnectionPool.PutConnection(PooledStream pooledStream, Object owningObject, Int32 creationTimeout, Boolean canReuse)
+   at System.Net.FtpWebRequest.FinishRequestStage(RequestStage stage)
+   at System.Net.FtpWebRequest.GetRequestStream()
+   at PostalionWebService.PostalionWebService.ExportEmbosseFile(EmbosseRequest_POST dt, String fileName, String mAPITrackingNo) in E:\Shahid\Development\GIT\AFSMW\ASBB\MWDC\ASBBMobileDebitService\PostalionWebService.asmx.cs:line 1909
+
