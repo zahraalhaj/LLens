@@ -1,0 +1,10 @@
+{
+  "name": "apache_access",
+  "description": "Apache access log (common/combined format)",
+  "source_system": "Apache",
+  "structure": "regex",
+  "min_confidence": 0.6,
+  "line_regex": "^(?P<ip>\\S+) \\S+ \\S+ \\[(?P<ts>[^\\]]+)\\] \"(?P<message>[^\"]*)\" (?P<status>\\d{3}) \\S+$",
+  "ts_format": "%d/%b/%Y:%H:%M:%S %z",
+  "level_map": {}
+}

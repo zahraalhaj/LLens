@@ -1,0 +1,16 @@
+{
+  "name": "python_logging",
+  "description": "Python standard logging output (asctime - name - levelname - message)",
+  "source_system": "Python App",
+  "structure": "regex",
+  "min_confidence": 0.6,
+  "line_regex": "^(?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3}) - (?P<component>[\\w.]+) - (?P<level>[A-Z]+) - (?P<message>.*)$",
+  "ts_format": "%Y-%m-%d %H:%M:%S,%f",
+  "level_map": {
+    "DEBUG": "DEBUG",
+    "INFO": "INFO",
+    "WARNING": "WARN",
+    "ERROR": "ERROR",
+    "CRITICAL": "CRITICAL"
+  }
+}

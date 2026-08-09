@@ -1,0 +1,8 @@
+2026-08-05 10:00:01,123 - app.main - INFO - Application started
+2026-08-05 10:00:02,456 - app.auth - INFO - User 'salma' logged in
+2026-08-05 10:00:03,789 - app.db - DEBUG - Query executed in 2ms
+2026-08-05 10:00:04,012 - app.main - WARNING - Retrying connection to database
+2026-08-05 10:00:05,345 - app.db - ERROR - Connection refused: timeout after 30s
+2026-08-05 10:00:06,678 - app.main - INFO - Retry succeeded
+2026-08-05 10:00:07,901 - app.payment - CRITICAL - Payment gateway unreachable, manual intervention required
+2026-08-05 10:00:08,234 - app.main - INFO - User 'salma' logged out
