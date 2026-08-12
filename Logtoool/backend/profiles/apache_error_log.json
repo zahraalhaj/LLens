@@ -1,0 +1,22 @@
+{
+  "name": "Apache Error Log",
+  "type": "regex",
+  "pattern": "^\\[(?P<timestamp>[^\\]]+)\\]\\s+\\[(?:[\\w.]+:)?(?P<level>\\w+)\\]\\s+(?:\\[pid\\s+\\d+:\\w+\\s+\\d+\\]\\s+)?(?:\\[client\\s+(?P<client>[^\\]]+)\\]\\s+)?(?P<message>.*)$",
+  "timestamp_field": "timestamp",
+  "timestamp_format": null,
+  "level_field": "level",
+  "component_field": null,
+  "message_field": "message",
+  "source_system_field": "client",
+  "default_source_system": "apache_server",
+  "timezone": "UTC",
+  "min_match_ratio": 0.8,
+  "level_map": {
+    "NOTICE": "INFO",
+    "WARN": "WARN",
+    "ERROR": "ERROR",
+    "CRIT": "CRITICAL",
+    "ALERT": "CRITICAL",
+    "EMERG": "CRITICAL"
+  }
+}

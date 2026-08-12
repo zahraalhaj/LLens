@@ -1,0 +1,5 @@
+{"timestamp": "2026-08-05T14:30:00Z", "level": "INFO", "service": "payment-gateway", "message": "Payment service initialized successfully"}
+{"timestamp": "2026-08-05T14:30:05Z", "level": "INFO", "service": "payment-gateway", "message": "Processing transaction tx_987123"}
+{"timestamp": "2026-08-05T14:30:08Z", "level": "WARN", "service": "payment-gateway", "message": "Payment provider latency high: 1450ms"}
+{"timestamp": "2026-08-05T14:30:12Z", "level": "ERROR", "service": "payment-gateway", "message": "Payment processing failed: Connection timeout to bank gateway"}
+{"timestamp": "2026-08-05T14:30:15Z", "level": "CRITICAL", "service": "database-cluster", "message": "Primary node disk space remaining < 2%"}

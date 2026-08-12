@@ -1,0 +1,13 @@
+{
+  "name": "Standard Bracket [TIMESTAMP] [LEVEL]",
+  "type": "regex",
+  "pattern": "^(?:\\[)?(?P<timestamp>\\d{4}-\\d{2}-\\d{2}[T\\s]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z?)(?:\\])?\\s*\\[(?P<level>\\w+)\\]\\s*(?:\\[(?P<component>[^\\]]+)\\])?\\s*:?\\s*(?P<message>.*)$",
+  "timestamp_field": "timestamp",
+  "timestamp_format": null,
+  "level_field": "level",
+  "component_field": "component",
+  "message_field": "message",
+  "default_source_system": "generic_app",
+  "timezone": "UTC",
+  "min_match_ratio": 0.8
+}
