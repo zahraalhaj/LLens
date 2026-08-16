@@ -21,7 +21,9 @@ import xml.etree.ElementTree as ET
 DISPLAY_NAME = "ABCE Debit Portal (Correlation ID + Arrow Timestamp)"
 DEFAULT_SOURCE_SYSTEM = "abce_debit_portal"
 
-_TS_LINE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\s*->", re.MULTILINE)
+_TS_LINE_RE = re.compile(
+    r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\s*->", re.MULTILINE
+)
 
 
 def detect(sample_text: str) -> bool:

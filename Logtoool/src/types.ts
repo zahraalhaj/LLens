@@ -108,10 +108,39 @@ export interface ChatMessage {
   timestamp: string;
 }
 
-export interface AlertRuleInfo {
+export interface AlertRule {
+  rule_id: string;
   name: string;
-  description: string;
-  configurable: boolean;
+  enabled: boolean;
+  min_level: string;
+  source_system_filter: string | null;
+  component_filter: string | null;
+  message_contains: string | null;
+  mode: 'immediate' | 'digest';
+  dedup_window_minutes: number;
+  recipients: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertDispatchLogEntry {
+  dispatch_id: string;
+  rule_id: string | null;
+  rule_name: string;
+  batch_id: string | null;
+  triggered_at: string;
+  recipient: string;
+  subject: string;
+  success: boolean;
+  status_message: string | null;
+  event_count: number;
+}
+
+export interface AlertDispatchHistory {
+  total: number;
+  page: number;
+  page_size: number;
+  entries: AlertDispatchLogEntry[];
 }
 
 export interface User {
@@ -121,4 +150,35 @@ export interface User {
   created_at?: string;
   is_active?: boolean;
   must_change_password?: boolean;
+}
+
+export type MachineAuthType = 'password' | 'key';
+
+export interface RemoteMachine {
+  machine_id: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: MachineAuthType;
+  remote_directory: string;
+  recursive: boolean;
+  poll_interval_minutes: number;
+  enabled: boolean;
+  host_key_fingerprint: string | null;
+  created_at: string;
+  last_polled_at: string | null;
+  last_status: 'success' | 'error' | null;
+  last_error: string | null;
+  last_files_ingested: number | null;
+}
+
+export interface PollResult {
+  machine_id: string;
+  files_found: number;
+  files_ingested: number;
+  files_unchanged: number;
+  files_rotated: number;
+  total_events_ingested: number;
+  errors: string[];
 }

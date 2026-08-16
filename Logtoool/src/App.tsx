@@ -13,6 +13,7 @@ import { AlertsView } from './components/AlertsView';
 import { ChatView } from './components/ChatView';
 import { SettingsView } from './components/SettingsView';
 import { UsersView } from './components/UsersView';
+import { ControlCenterView } from './components/ControlCenterView';
 import { ParserProfile, LogStats } from './types';
 import { api } from './api';
 
@@ -139,6 +140,8 @@ function AppShell() {
           )}
 
           {activeTab === 'users' && user.role === 'admin' && <UsersView currentUserId={user.user_id} />}
+
+          {activeTab === 'control-center' && user.role === 'admin' && <ControlCenterView />}
         </main>
       </div>
     </div>

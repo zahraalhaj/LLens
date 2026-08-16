@@ -1,122 +1,313 @@
-# Adapted from the customer-provided parser_ABCE_Credit.py.
-# Parsing logic is UNCHANGED from the original. Two additive-only changes:
-#   1. Removed the __main__ runner block (this now runs as a library module).
-#   2. record["_raw_block"] captures the original source text per record,
-#      purely for the app's raw-log inspection view -- does not affect any
-#      of the original field extraction logic.
-#
-# Original comment: "this has been used TO ASBB_MWCreditPortal.log file to
-# parse and convert to JSON format"
 import re
 import json
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 DISPLAY_NAME = "ABCE Credit Portal (Log Tracker / ISO8583 XML)"
 DEFAULT_SOURCE_SYSTEM = "abce_credit_portal"
 
-# Distinguishes this format from the others in this package: US-style
-# M/D/YYYY H:MM:SS AM/PM timestamp with NO "->" after it (that's the Debit
-# family), typically followed somewhere by "Log Tracker No:".
-_TS_LINE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M(?!\s*->)", re.MULTILINE)
+# Timestamp format used by ABCE logs
+_TIMESTAMP_RE = r"\d{1,2}/\d{1,2}/\d{4}\s+" r"\d{1,2}:\d{2}:\d{2}\s+[AP]M"
+
+# Detect parser
+_TS_LINE_RE = re.compile(
+    rf"^{_TIMESTAMP_RE}(?!\s*->)",
+    re.MULTILINE,
+)
 
 
 def detect(sample_text: str) -> bool:
-    return bool(_TS_LINE_RE.search(sample_text)) and "Log Tracker No:" in sample_text
+    return bool(_TS_LINE_RE.search(sample_text)) and ("Log Tracker No:" in sample_text)
 
 
-def parse_log_file(log_file_path, output_json_path=None):
-    with open(log_file_path, "r", encoding="utf-8", errors="ignore") as f:
+def normalize_timestamp(ts):
+    try:
+        return datetime.strptime(ts, "%m/%d/%Y %I:%M:%S %p").isoformat()
+    except Exception:
+        return ts
+
+
+def mask_sensitive(value):
+    if not value:
+        return value
+
+    value = str(value)
+
+    if len(value) <= 8:
+        return value
+
+    return value[:4] + "*" * (len(value) - 8) + value[-4:]
+
+
+def parse_function_parameters(args_str):
+    params = {}
+
+    for match in re.finditer(r"(\w+)\s*=\s*([^,]*)", args_str):
+        key = match.group(1).strip()
+        val = match.group(2).strip()
+
+        if key.lower() in (
+            "pcinumber",
+            "cif",
+            "email",
+            "user",
+            "psw",
+        ):
+            val = mask_sensitive(val)
+
+        params[key] = val
+
+    return params
+
+
+def parse_log_file(
+    log_file_path,
+    output_json_path=None,
+    group_by_correlation=False,
+):
+
+    with open(
+        log_file_path,
+        "r",
+        encoding="utf-8",
+        errors="ignore",
+    ) as f:
         raw_text = f.read()
 
-    # Match timestamp pattern followed by "=>"
-    timestamp_pattern = r"^(\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M)\s+"
-    raw_blocks = re.split(timestamp_pattern, raw_text, flags=re.MULTILINE)
+    # Split whenever a timestamp starts
+    block_pattern = rf"(?=^{_TIMESTAMP_RE}\s+Log Tracker No:)"
+
+    blocks = [
+        b.strip()
+        for b in re.split(
+            block_pattern,
+            raw_text,
+            flags=re.MULTILINE,
+        )
+        if b.strip()
+    ]
 
     parsed_records = []
 
-    # re.split creates pairs: [leading_text, timestamp_1, body_1, timestamp_2, body_2, ...]
-    for i in range(1, len(raw_blocks), 2):
-        timestamp = raw_blocks[i].strip()
-        body = raw_blocks[i + 1].strip()
+    for block in blocks:
+
+        ts_match = re.match(
+            rf"^({_TIMESTAMP_RE})",
+            block,
+        )
+
+        if not ts_match:
+            continue
+
+        timestamp = ts_match.group(1)
+
+        body = block[len(timestamp) :].strip()
 
         record = {
             "timestamp": timestamp,
+            "timestamp_iso": normalize_timestamp(timestamp),
             "correlation_id": None,
-            "log_type": "INFO",
+            "log_type": "GENERIC",
             "action": None,
+            "retry_count": None,
+            "calling_method": None,
             "details": {},
+            "raw_message": body,
         }
-        record["_raw_block"] = f"{timestamp} {body}"
 
-        # Extract "Log Tracker No: <ID> => <content>"
         tracker_match = re.match(
-            r"^Log Tracker No:\s*([^\s=>]+)\s*=>\s*(.*)", body, re.DOTALL
+            r"Log Tracker No:\s*([^\s=]+)\s*=>\s*(.*)",
+            body,
+            re.DOTALL,
         )
+
         if tracker_match:
             record["correlation_id"] = tracker_match.group(1).strip()
             content = tracker_match.group(2).strip()
         else:
             content = body
 
-        # Case A: Handle XML Payloads
-        if "<?xml" in content or "<Iso8583PostXml>" in content:
+        retry_match = re.search(
+            r"mqRetry\s*:\s*(\d+)|mqRetry\s*(\d+)",
+            content,
+        )
+
+        if retry_match:
+            retry_val = retry_match.group(1) or retry_match.group(2)
+
+            record["retry_count"] = int(retry_val)
+
+        calling_match = re.search(
+            r"Calling Method\s*:\s*\{([^}]*)\}",
+            content,
+        )
+
+        if calling_match:
+            record["calling_method"] = calling_match.group(1).strip()
+
+        # --------------------------------------------------
+        # XML Payload
+        # --------------------------------------------------
+        if "<?xml" in content or "<Iso8583PostXml" in content:
             record["log_type"] = "XML_PAYLOAD"
+
             xml_start = content.find("<?xml")
+
             if xml_start == -1:
                 xml_start = content.find("<Iso8583PostXml")
 
             record["action"] = content[:xml_start].strip(" :-")
+
             raw_xml = content[xml_start:]
 
             try:
                 root = ET.fromstring(raw_xml)
+
                 fields = {}
+
                 for field in root.findall(".//Fields/*"):
                     fields[field.tag] = field.text or ""
+
                 record["details"] = {
                     "msg_type": root.findtext("MsgType"),
                     "fields": fields,
                 }
+
             except ET.ParseError:
+
                 record["details"] = {"raw_xml": raw_xml}
 
-        # Case B: Handle Function Inputs (e.g., CC_AccountEnquiry Inputs-:Data in CC_AccountEnquiry(...))
+        # --------------------------------------------------
+        # Function Input
+        # --------------------------------------------------
         elif "Inputs" in content and "(" in content and ")" in content:
+
             record["log_type"] = "FUNCTION_INPUT"
 
-            # Extract function name and arguments inside parenthesis
             func_match = re.search(
-                r"(?:Inputs(?:-:\s*Data\s+in)?\s+)?(\w+)\s*\((.*?)\)",
+                r"([A-Za-z0-9_]+)\s*\((.*?)\)",
                 content,
                 re.DOTALL,
             )
+
             if func_match:
-                record["action"] = func_match.group(1).strip()
-                args_str = func_match.group(2)
 
-                # Extract key=value parameters cleanly
-                args = {}
-                for param in re.finditer(r"(\w+)\s*=\s*([^,]*)", args_str):
-                    args[param.group(1).strip()] = param.group(2).strip()
+                record["action"] = func_match.group(1)
 
-                record["details"] = {"parameters": args}
-            else:
-                record["action"] = content
+                record["details"] = {
+                    "parameters": parse_function_parameters(func_match.group(2))
+                }
 
-        # Case C: Handle Warnings
+        # --------------------------------------------------
+        # VP Response
+        # --------------------------------------------------
+        elif "VP_Response:" in content:
+
+            record["log_type"] = "FUNCTION_RESPONSE"
+
+            action_match = re.match(
+                r"([A-Za-z0-9_]+)",
+                content,
+            )
+
+            if action_match:
+                record["action"] = action_match.group(1)
+
+            parts = content.split(
+                "VP_Response:",
+                1,
+            )
+
+            record["details"] = {
+                "response": (parts[1].strip() if len(parts) > 1 else None)
+            }
+
+        # --------------------------------------------------
+        # Request End
+        # --------------------------------------------------
+        elif re.search(
+            r"End of request",
+            content,
+            re.IGNORECASE,
+        ):
+
+            record["log_type"] = "REQUEST_END"
+
+            end_match = re.match(
+                r"([A-Za-z0-9_]+)",
+                content,
+            )
+
+            if end_match:
+                record["action"] = end_match.group(1)
+
+        # --------------------------------------------------
+        # Warning
+        # --------------------------------------------------
         elif "Warrning" in content or "warning" in content.lower():
+
             record["log_type"] = "WARNING"
             record["action"] = content
 
-        # Case D: Generic Log Messages
+        # --------------------------------------------------
+        # Generic
+        # --------------------------------------------------
         else:
+
+            record["log_type"] = "GENERIC"
             record["action"] = content
 
         parsed_records.append(record)
 
-    if output_json_path:
-        with open(output_json_path, "w", encoding="utf-8") as out_file:
-            json.dump(parsed_records, out_file, indent=2)
-        print(f"Successfully converted '{log_file_path}' to '{output_json_path}'")
+    # --------------------------------------------------
+    # Optional transaction grouping
+    # --------------------------------------------------
+    if group_by_correlation:
 
-    return parsed_records
+        grouped = {}
+
+        for rec in parsed_records:
+
+            cid = rec["correlation_id"] or "NO_CORRELATION_ID"
+
+            grouped.setdefault(cid, []).append(rec)
+
+        result = []
+
+        for cid, events in grouped.items():
+
+            result.append(
+                {
+                    "correlation_id": cid,
+                    "event_count": len(events),
+                    "events": events,
+                }
+            )
+
+    else:
+
+        result = parsed_records
+
+    if output_json_path:
+
+        with open(
+            output_json_path,
+            "w",
+            encoding="utf-8",
+        ) as out_file:
+
+            json.dump(
+                result,
+                out_file,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+        print(
+            f"Successfully converted "
+            f"'{log_file_path}' "
+            f"to "
+            f"'{output_json_path}'"
+        )
+
+    return result

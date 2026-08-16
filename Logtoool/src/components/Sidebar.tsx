@@ -9,11 +9,12 @@ import {
   Terminal,
   ActivitySquare,
   Users as UsersIcon,
+  ServerCog,
   LogOut,
 } from 'lucide-react';
 import { User } from '../types';
 
-export type TabType = 'upload' | 'explore' | 'timeline' | 'stats' | 'profiling' | 'alerts' | 'chat' | 'settings' | 'users';
+export type TabType = 'upload' | 'explore' | 'timeline' | 'stats' | 'profiling' | 'alerts' | 'chat' | 'settings' | 'users' | 'control-center';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -35,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criti
     { id: 'chat' as TabType, label: 'Chat With Logs', icon: MessageSquareCode, badge: ollamaAvailable ? 'AI' : null },
     { id: 'settings' as TabType, label: 'Profiles & Settings', icon: Settings, badge: null },
     ...(user.role === 'admin' ? [{ id: 'users' as TabType, label: 'Users', icon: UsersIcon, badge: null }] : []),
+    ...(user.role === 'admin' ? [{ id: 'control-center' as TabType, label: 'Control Center', icon: ServerCog, badge: null }] : []),
   ];
 
   return (

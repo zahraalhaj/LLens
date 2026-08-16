@@ -29,6 +29,7 @@ ALL_CACHED_DEPS = [
     "get_email_dispatcher",
     "get_dedup_engine",
     "get_alert_processor",
+    "get_remote_machine_service",
 ]
 
 

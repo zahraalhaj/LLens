@@ -11,6 +11,7 @@ from functools import lru_cache
 from fastapi import Cookie, Depends, HTTPException, status
 
 from backend.alerts.email import EmailDispatcher
+from backend.alerts.rule_manager import AlertRuleManager
 from backend.alerts.rules import AlertRulesProcessor
 from backend.alerts.state import AlertDeduplicationEngine
 from backend.api.config import settings
@@ -23,6 +24,7 @@ from backend.llm.chat import LogChatAssistant
 from backend.llm.client import OllamaClient
 from backend.llm.explain import LogExplainer
 from backend.llm.profile_gen import LLMProfileGenerator
+from backend.remote.service import RemoteMachineService
 
 SESSION_COOKIE_NAME = "logtool_session"
 
@@ -83,7 +85,12 @@ def get_email_dispatcher() -> EmailDispatcher:
 
 @lru_cache
 def get_dedup_engine() -> AlertDeduplicationEngine:
-    return AlertDeduplicationEngine()
+    return AlertDeduplicationEngine(db_path=settings.db_path)
+
+
+@lru_cache
+def get_alert_rule_manager() -> AlertRuleManager:
+    return AlertRuleManager(db_path=settings.db_path)
 
 
 @lru_cache
@@ -91,6 +98,18 @@ def get_alert_processor() -> AlertRulesProcessor:
     return AlertRulesProcessor(
         email_dispatcher=get_email_dispatcher(),
         dedup_engine=get_dedup_engine(),
+        rule_manager=get_alert_rule_manager(),
+        db_path=settings.db_path,
+    )
+
+
+@lru_cache
+def get_remote_machine_service() -> RemoteMachineService:
+    return RemoteMachineService(
+        db_path=settings.db_path,
+        ingestion_engine=get_ingestion_engine(),
+        db_manager=get_db(),
+        alert_processor=get_alert_processor(),
     )
 
 
