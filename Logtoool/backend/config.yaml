@@ -1,6 +1,6 @@
 max_upload_size_mb: 500
 ollama_url: "http://localhost:11434"
-ollama_model: "llama3.1:8b-instruct-q4_K_M"
+ollama_model: "qwen3:8b"
 db_path: "data/logs.db"
 profiles_dir: "profiles"
 default_match_threshold: 0.8
