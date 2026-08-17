@@ -4,6 +4,7 @@ run so a fresh install isn't alert-silent (mirrors the old hardcoded
 CRITICAL-immediate / ERROR-digest behavior, but as regular editable rows
 now instead of code).
 """
+
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -23,12 +24,23 @@ logger = logging.getLogger("logtool.alerts.rule_manager")
 # severity," so it never satisfies a min_level threshold implicitly. A rule
 # that specifically wants UNKNOWN events must set min_level to it exactly
 # (handled as a special case in level_meets_threshold below).
-SEVERITY_ORDER = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR, LogLevel.CRITICAL]
+SEVERITY_ORDER = [
+    LogLevel.DEBUG,
+    LogLevel.INFO,
+    LogLevel.WARN,
+    LogLevel.ERROR,
+    LogLevel.CRITICAL,
+]
 
 VALID_MODES = {"immediate", "digest"}
 
 # Fields that mean "no filter" when empty -- stored as NULL, not "".
-OPTIONAL_FILTER_FIELDS = ("source_system_filter", "component_filter", "message_contains", "recipients")
+OPTIONAL_FILTER_FIELDS = (
+    "source_system_filter",
+    "component_filter",
+    "message_contains",
+    "recipients",
+)
 
 DEFAULT_RULES = [
     {
@@ -58,7 +70,9 @@ def level_meets_threshold(level: str, min_level: str) -> bool:
     if level == min_level:
         return True
     try:
-        return SEVERITY_ORDER.index(LogLevel(level)) >= SEVERITY_ORDER.index(LogLevel(min_level))
+        return SEVERITY_ORDER.index(LogLevel(level)) >= SEVERITY_ORDER.index(
+            LogLevel(min_level)
+        )
     except (ValueError, KeyError):
         return False
 
@@ -66,7 +80,9 @@ def level_meets_threshold(level: str, min_level: str) -> bool:
 class AlertRuleManager:
     def __init__(self, db_path: str):
         self.engine = create_engine(
-            f"sqlite:///{db_path}", connect_args={"check_same_thread": False, "timeout": 30.0}, echo=False
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False, "timeout": 30.0},
+            echo=False,
         )
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
@@ -75,7 +91,11 @@ class AlertRuleManager:
     def _seed_defaults_if_empty(self) -> None:
         session = self.Session()
         try:
-            if session.query(AlertRuleSeedMarkerModel).filter_by(marker_id="seeded").first():
+            if (
+                session.query(AlertRuleSeedMarkerModel)
+                .filter_by(marker_id="seeded")
+                .first()
+            ):
                 return  # already seeded once, even if rules were since deleted -- don't resurrect them
             now = datetime.now(timezone.utc).isoformat()
             for defaults in DEFAULT_RULES:
@@ -100,7 +120,9 @@ class AlertRuleManager:
     def list_rules(self) -> List[Dict[str, Any]]:
         session = self.Session()
         try:
-            rules = session.query(AlertRuleModel).order_by(AlertRuleModel.created_at).all()
+            rules = (
+                session.query(AlertRuleModel).order_by(AlertRuleModel.created_at).all()
+            )
             return [self._to_dict(r) for r in rules]
         finally:
             session.close()
@@ -176,7 +198,9 @@ class AlertRuleManager:
 
             if fields.get("name") and fields["name"] != rule.name:
                 if session.query(AlertRuleModel).filter_by(name=fields["name"]).first():
-                    raise RuleNameTakenError(f"A rule named '{fields['name']}' already exists")
+                    raise RuleNameTakenError(
+                        f"A rule named '{fields['name']}' already exists"
+                    )
                 rule.name = fields["name"]
 
             for key in ("min_level", "mode", "dedup_window_minutes"):
@@ -185,7 +209,9 @@ class AlertRuleManager:
 
             for key in OPTIONAL_FILTER_FIELDS:
                 if key in fields:
-                    setattr(rule, key, fields[key] or None)  # "" -> NULL (means "no filter")
+                    setattr(
+                        rule, key, fields[key] or None
+                    )  # "" -> NULL (means "no filter")
 
             if fields.get("enabled") is not None:
                 rule.enabled = 1 if fields["enabled"] else 0

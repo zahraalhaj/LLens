@@ -2,6 +2,7 @@
 Alert system models. Shares the same declarative Base as everything else --
 one SQLite file, Base.metadata.create_all() picks up every model.
 """
+
 from sqlalchemy import Column, Integer, String, Text
 
 from backend.core.store import Base
@@ -40,11 +41,14 @@ class AlertRuleModel(Base):
 class AlertDispatchLogModel(Base):
     """Persisted record of every alert email actually sent (or attempted) --
     addresses the 'no dispatch history' gap flagged in the original audit."""
+
     __tablename__ = "alert_dispatch_log"
 
     dispatch_id = Column(String, primary_key=True)
     rule_id = Column(String, nullable=True)  # nullable: manual test-sends have no rule
-    rule_name = Column(String, nullable=False)  # denormalized -- survives the rule being deleted later
+    rule_name = Column(
+        String, nullable=False
+    )  # denormalized -- survives the rule being deleted later
     batch_id = Column(String, nullable=True)
     triggered_at = Column(String, nullable=False)
     recipient = Column(String, nullable=False)
@@ -60,6 +64,7 @@ class AlertDedupStateModel(Base):
     was the original implementation and lost all suppression state on
     every restart, which could cause an alert storm right after a
     deploy/restart, exactly when you don't want one."""
+
     __tablename__ = "alert_dedup_state"
 
     dedup_key = Column(String, primary_key=True)  # composite key, pre-joined
@@ -73,6 +78,7 @@ class AlertRuleSeedMarkerModel(Base):
     should NOT see the defaults silently reappear. Row count == 0 doesn't
     distinguish 'never seeded' from 'seeded, then everything deleted';
     this marker does."""
+
     __tablename__ = "alert_rule_seed_marker"
 
     marker_id = Column(String, primary_key=True)  # always "seeded"
