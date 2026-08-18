@@ -77,21 +77,21 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-slate-900">Users</h2>
-        <p className="text-sm text-slate-500">
+        <h2 className="text-xl font-bold text-text">Users</h2>
+        <p className="text-sm text-text-muted">
           No self-service signup -- accounts are created here by an admin.
         </p>
       </div>
 
       {error && (
-        <div className="text-sm font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-4 py-2.5">
+        <div className="text-sm font-medium text-error bg-error-light border border-error/20 rounded-lg px-4 py-2.5">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleCreate} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-          <UserPlus className="w-4 h-4 text-blue-600" /> Create user
+      <form onSubmit={handleCreate} className="bg-surface border-surface-border border rounded-2xl card-brand-glow p-5 shadow-sm">
+        <h3 className="text-sm font-bold text-text mb-3 flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-brand" /> Create user
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
@@ -100,7 +100,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
-            className="px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 text-sm bg-surface-alt border-surface-border border rounded-lg focus:outline-none focus:ring-2 input-brand"
           />
           <input
             type="password"
@@ -109,12 +109,12 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
-            className="px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 text-sm bg-surface-alt border-surface-border border rounded-lg focus:outline-none focus:ring-2 input-brand"
           />
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as 'admin' | 'member')}
-            className="px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 text-sm bg-surface-alt border-surface-border border rounded-lg focus:outline-none focus:ring-2 input-brand"
           >
             <option value="member">Member</option>
             <option value="admin">Admin</option>
@@ -122,16 +122,16 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
           <button
             type="submit"
             disabled={creating}
-            className="px-3 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer"
+            className="px-3 py-2 text-sm font-semibold bg-brand hover:bg-brand-hover disabled:bg-brand/50 text-white rounded-lg shadow-md shadow-brand/20 transition-all cursor-pointer"
           >
             {creating ? 'Creating…' : 'Create'}
           </button>
         </div>
       </form>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-surface border-surface-border border rounded-2xl card-brand-glow shadow-sm overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          <thead className="bg-surface-alt border-b border-surface-border text-left text-xs font-semibold text-text-muted uppercase tracking-wide">
             <tr>
               <th className="px-4 py-2.5">Username</th>
               <th className="px-4 py-2.5">Role</th>
@@ -141,15 +141,15 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
               <th className="px-4 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-surface-border">
             {users.map((u) => (
-              <tr key={u.user_id}>
-                <td className="px-4 py-2.5 font-medium text-slate-800">{u.username}</td>
-                <td className="px-4 py-2.5 capitalize text-slate-600">{u.role}</td>
+              <tr key={u.user_id} className="table-row-brand">
+                <td className="px-4 py-2.5 font-medium text-text">{u.username}</td>
+                <td className="px-4 py-2.5 capitalize text-text-secondary">{u.role}</td>
                 <td className="px-4 py-2.5">
                   <span
                     className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      u.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                      u.is_active ? 'bg-success-light text-success border border-success/20' : 'bg-surface-alt text-text-muted border border-surface-border'
                     }`}
                   >
                     {u.is_active ? 'Active' : 'Deactivated'}
@@ -157,21 +157,21 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
                 </td>
                 <td className="px-4 py-2.5">
                   {u.must_change_password ? (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-warning-light text-warning border border-warning/20">
                       Change required
                     </span>
                   ) : (
-                    <span className="text-xs text-slate-400">OK</span>
+                    <span className="text-xs text-text-muted">OK</span>
                   )}
                 </td>
-                <td className="px-4 py-2.5 text-slate-500">{u.created_at?.slice(0, 10)}</td>
+                <td className="px-4 py-2.5 text-text-muted">{u.created_at?.slice(0, 10)}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center justify-end gap-1.5">
                     <button
                       onClick={() => handleForcePasswordReset(u)}
                       disabled={!!u.must_change_password}
                       title="Force password reset on next login"
-                      className="p-1.5 rounded-md text-amber-600 hover:bg-amber-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      className="p-1.5 rounded-md text-warning hover:bg-warning-light disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
@@ -179,7 +179,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
                       onClick={() => handleToggleActive(u)}
                       disabled={u.user_id === currentUserId}
                       title={u.is_active ? 'Deactivate' : 'Reactivate'}
-                      className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      className="p-1.5 rounded-md text-text-muted hover:bg-surface-alt disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     >
                       {u.is_active ? <ShieldOff className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                     </button>
@@ -187,7 +187,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
                       onClick={() => handleDelete(u)}
                       disabled={u.user_id === currentUserId}
                       title="Delete"
-                      className="p-1.5 rounded-md text-rose-500 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      className="p-1.5 rounded-md text-error hover:bg-error-light disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

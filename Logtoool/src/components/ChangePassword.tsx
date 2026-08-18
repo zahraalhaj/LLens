@@ -38,27 +38,29 @@ export const ChangePassword: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-surface-alt flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
+        {/* Brand */}
         <div className="flex items-center gap-3 justify-center mb-8">
-          <div className="bg-amber-500 text-white p-2 rounded-lg font-bold flex items-center justify-center w-10 h-10 shadow-xs">
-            <KeyRound className="w-6 h-6" />
+          <div className="w-12 h-12 bg-warning rounded-xl flex items-center justify-center shadow-lg shadow-warning/30">
+            <KeyRound className="w-7 h-7 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">Set a new password</h1>
-            <p className="text-xs text-slate-500">Required before you can continue</p>
+            <h1 className="text-xl font-extrabold text-text tracking-tight">Set a new password</h1>
+            <p className="text-xs text-text-secondary">Required before you can continue</p>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 space-y-4">
-          <p className="text-xs text-slate-600 leading-relaxed">
-            Signed in as <strong className="text-slate-800">{user?.username}</strong>. Your account's
+        {/* Form */}
+        <div className="bg-surface border border-surface-border rounded-2xl shadow-lg p-6 space-y-4">
+          <p className="text-xs text-text-secondary leading-relaxed">
+            Signed in as <strong className="text-text">{user?.username}</strong>. Your account's
             current password was set by an administrator and must be changed before you can use the app.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="current" className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="current" className="block text-xs font-semibold text-text mb-1.5">
                 Current password
               </label>
               <input
@@ -68,13 +70,13 @@ export const ChangePassword: React.FC = () => {
                 autoFocus
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2.5 text-sm border border-surface-border rounded-lg bg-surface-alt text-text focus:outline-none input-brand"
                 required
               />
             </div>
 
             <div>
-              <label htmlFor="newpw" className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="newpw" className="block text-xs font-semibold text-text mb-1.5">
                 New password
               </label>
               <input
@@ -84,13 +86,13 @@ export const ChangePassword: React.FC = () => {
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2.5 text-sm border border-surface-border rounded-lg bg-surface-alt text-text focus:outline-none input-brand"
                 required
               />
             </div>
 
             <div>
-              <label htmlFor="confirmpw" className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label htmlFor="confirmpw" className="block text-xs font-semibold text-text mb-1.5">
                 Confirm new password
               </label>
               <input
@@ -100,13 +102,13 @@ export const ChangePassword: React.FC = () => {
                 minLength={8}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2.5 text-sm border border-surface-border rounded-lg bg-surface-alt text-text focus:outline-none input-brand"
                 required
               />
             </div>
 
             {(localError || error) && (
-              <div className="text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
+              <div className="text-xs font-medium text-error bg-error-light border border-error/20 rounded-lg px-3 py-2">
                 {localError || error}
               </div>
             )}
@@ -114,7 +116,7 @@ export const ChangePassword: React.FC = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-semibold bg-brand hover:bg-brand-hover disabled:opacity-50 text-white rounded-lg transition-all cursor-pointer disabled:cursor-not-allowed shadow-md shadow-brand/20"
             >
               {submitting ? 'Setting password…' : 'Set new password & continue'}
             </button>
@@ -122,7 +124,7 @@ export const ChangePassword: React.FC = () => {
             <button
               type="button"
               onClick={() => logout()}
-              className="w-full text-xs text-slate-400 hover:text-slate-600 text-center cursor-pointer"
+              className="w-full text-xs text-text-muted hover:text-text text-center cursor-pointer"
             >
               Sign out instead
             </button>

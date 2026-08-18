@@ -98,27 +98,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs space-y-4">
-        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-blue-600" />
+      <div className="bg-surface p-6 rounded-2xl border border-surface-border shadow-2xs space-y-4 card-brand-glow">
+        <h2 className="text-xl font-bold text-text flex items-center gap-2">
+          <Settings className="w-5 h-5 text-brand" />
           Settings
         </h2>
-        <p className="text-xs text-slate-500">Local Ollama AI configuration and parser profile management.</p>
+        <p className="text-xs text-text-muted">Local Ollama AI configuration and parser profile management.</p>
 
-        <div className="flex items-center gap-2 border-b border-slate-200 pt-2">
+        <div className="flex items-center gap-2 border-b border-surface-border pt-2">
           <button
             onClick={() => setActiveTab('ai')}
             className={`px-4 py-2 font-bold text-xs border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'ai' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+              activeTab === 'ai' ? 'border-brand text-brand' : 'border-transparent text-text-muted hover:text-text'
             }`}
           >
-            <Cpu className="w-3.5 h-3.5 text-blue-600" />
+            <Cpu className="w-3.5 h-3.5 text-brand" />
             <span>Ollama & AI</span>
           </button>
           <button
             onClick={() => setActiveTab('manager')}
             className={`px-4 py-2 font-bold text-xs border-b-2 transition-all cursor-pointer ${
-              activeTab === 'manager' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+              activeTab === 'manager' ? 'border-brand text-brand' : 'border-transparent text-text-muted hover:text-text'
             }`}
           >
             Active Profiles ({profiles.length})
@@ -127,7 +127,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
             <button
               onClick={() => setActiveTab('builder')}
               className={`px-4 py-2 font-bold text-xs border-b-2 transition-all cursor-pointer ${
-                activeTab === 'builder' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+                activeTab === 'builder' ? 'border-brand text-brand' : 'border-transparent text-text-muted hover:text-text'
               }`}
             >
               Profile Builder
@@ -138,34 +138,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
         {activeTab === 'ai' && (
           <div className="space-y-6 pt-2">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-7 bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="lg:col-span-7 bg-sidebar text-white p-5 rounded-2xl border border-sidebar-border space-y-4">
+                <div className="flex items-center justify-between border-b border-sidebar-border pb-3">
                   <div className="flex items-center gap-2">
-                    <Server className="w-4 h-4 text-emerald-400" />
+                    <Server className="w-4 h-4 text-success" />
                     <h3 className="text-sm font-extrabold text-white tracking-wide uppercase">Ollama Configuration</h3>
                   </div>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
+                  <span className="text-[10px] bg-success/10 text-success border border-success/30 px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
                     <Lock className="w-3 h-3" /> Local-only, no cloud fallback
                   </span>
                 </div>
 
                 <div className="space-y-3 text-xs">
-                  <p className="text-slate-400">
+                  <p className="text-white/50">
                     This app talks to Ollama only -- there's no cloud AI fallback, so nothing in this section
-                    is user-editable from the browser. Set <code className="text-amber-300">OLLAMA_URL</code> and{' '}
-                    <code className="text-amber-300">OLLAMA_MODEL</code> as server environment variables to change these.
+                    is user-editable from the browser. Set <code className="text-warning">OLLAMA_URL</code> and{' '}
+                    <code className="text-warning">OLLAMA_MODEL</code> as server environment variables to change these.
                   </p>
 
                   <div>
-                    <label className="block font-bold text-slate-300 mb-1">Ollama Host URL</label>
-                    <div className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-emerald-300 font-semibold">
+                    <label className="block font-bold text-white/80 mb-1">Ollama Host URL</label>
+                    <div className="w-full bg-sidebar border border-sidebar-border rounded-lg p-2.5 font-mono text-aquamarine font-semibold">
                       {aiConfig?.ollama_url ?? '…'}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-slate-300 mb-1">Model</label>
-                    <div className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-blue-300 font-semibold">
+                    <label className="block font-bold text-white/80 mb-1">Model</label>
+                    <div className="w-full bg-sidebar border border-sidebar-border rounded-lg p-2.5 font-mono text-visionary font-semibold">
                       {aiConfig?.ollama_model ?? '…'}
                     </div>
                   </div>
@@ -174,12 +174,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
                     <button
                       onClick={handleTestOllama}
                       disabled={testingOllama}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="px-4 py-2 bg-white/10 hover:bg-white/15 border border-sidebar-border text-white/80 font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
-                      {testingOllama ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-400" />}
+                      {testingOllama ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-warning" />}
                       Test Ollama Connection
                     </button>
-                    <span className={`text-xs font-bold ${ollamaAvailable ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    <span className={`text-xs font-bold ${ollamaAvailable ? 'text-success' : 'text-text-muted'}`}>
                       {ollamaAvailable ? '● Online' : '○ Offline'}
                     </span>
                   </div>
@@ -188,8 +188,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
                     <div
                       className={`p-3 rounded-lg border text-xs font-mono space-y-1 ${
                         ollamaTestResult.available
-                          ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
-                          : 'bg-rose-950/80 border-rose-800 text-rose-300'
+                          ? 'bg-success/10 border-success/30 text-success'
+                          : 'bg-error/10 border-error/30 text-error'
                       }`}
                     >
                       <div className="font-bold flex items-center gap-2">
@@ -201,26 +201,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
                 </div>
               </div>
 
-              <div className="lg:col-span-5 bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-blue-600" />
+              <div className="lg:col-span-5 bg-surface-alt p-5 rounded-2xl border border-surface-border space-y-3">
+                <h3 className="text-xs font-extrabold text-text uppercase tracking-wider flex items-center gap-2">
+                  <Terminal className="w-4 h-4 text-brand" />
                   How to run Ollama locally
                 </h3>
-                <ol className="space-y-3 text-xs text-slate-700 list-decimal list-inside font-medium">
-                  <li className="bg-white p-2.5 rounded-lg border border-slate-200">
-                    <strong className="text-slate-900 block font-bold mb-0.5">1. Install Ollama</strong>
-                    Download from <a href="https://ollama.com" target="_blank" rel="noreferrer" className="text-blue-600 underline">ollama.com</a>.
+                <ol className="space-y-3 text-xs text-text-secondary list-decimal list-inside font-medium">
+                  <li className="bg-surface p-2.5 rounded-lg border border-surface-border">
+                    <strong className="text-text block font-bold mb-0.5">1. Install Ollama</strong>
+                    Download from <a href="https://ollama.com" target="_blank" rel="noreferrer" className="text-brand underline">ollama.com</a>.
                   </li>
-                  <li className="bg-white p-2.5 rounded-lg border border-slate-200">
-                    <strong className="text-slate-900 block font-bold mb-0.5">2. Pull the model this app expects</strong>
-                    <pre className="bg-slate-900 text-emerald-400 p-2 rounded mt-1 text-[11px] font-mono">
+                  <li className="bg-surface p-2.5 rounded-lg border border-surface-border">
+                    <strong className="text-text block font-bold mb-0.5">2. Pull the model this app expects</strong>
+                    <pre className="bg-sidebar text-aquamarine p-2 rounded mt-1 text-[11px] font-mono">
                       ollama pull {aiConfig?.ollama_model ?? 'llama3.1:8b-instruct-q4_K_M'}
                     </pre>
                   </li>
-                  <li className="bg-white p-2.5 rounded-lg border border-slate-200">
-                    <strong className="text-slate-900 block font-bold mb-0.5">3. Set the backend's env vars</strong>
-                    <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">OLLAMA_URL</code>,{' '}
-                    <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">OLLAMA_MODEL</code> -- see <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">.env.example</code>.
+                  <li className="bg-surface p-2.5 rounded-lg border border-surface-border">
+                    <strong className="text-text block font-bold mb-0.5">3. Set the backend's env vars</strong>
+                    <code className="bg-surface-alt px-1 py-0.5 rounded font-mono">OLLAMA_URL</code>,{' '}
+                    <code className="bg-surface-alt px-1 py-0.5 rounded font-mono">OLLAMA_MODEL</code> -- see <code className="bg-surface-alt px-1 py-0.5 rounded font-mono">.env.example</code>.
                   </li>
                 </ol>
               </div>
@@ -232,21 +232,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {profiles.map((p) => (
-                <div key={p.name} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <div key={p.name} className="bg-surface-alt p-4 rounded-xl border border-surface-border space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-900">{p.name}</span>
-                    <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-200 uppercase">
+                    <span className="font-bold text-xs text-text">{p.name}</span>
+                    <span className="bg-brand/[0.08] text-brand text-[10px] font-bold px-2 py-0.5 rounded border border-brand/15 uppercase">
                       {p.type}
                     </span>
                   </div>
-                  <div className="text-[11px] font-mono bg-white p-2.5 rounded border border-slate-200 text-slate-700 break-all">
+                  <div className="text-[11px] font-mono bg-surface p-2.5 rounded border border-surface-border text-text-secondary break-all">
                     {p.pattern}
                   </div>
-                  <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium flex-wrap">
-                    <span>TS: <strong className="text-slate-800">{p.timestamp_field}</strong></span>
-                    <span>LVL: <strong className="text-slate-800">{p.level_field}</strong></span>
-                    <span>MSG: <strong className="text-slate-800">{p.message_field}</strong></span>
-                    <span>Min match: <strong className="text-slate-800">{(p.min_match_ratio * 100).toFixed(0)}%</strong></span>
+                  <div className="flex items-center gap-4 text-[10px] text-text-muted font-medium flex-wrap">
+                    <span>TS: <strong className="text-text">{p.timestamp_field}</strong></span>
+                    <span>LVL: <strong className="text-text">{p.level_field}</strong></span>
+                    <span>MSG: <strong className="text-text">{p.message_field}</strong></span>
+                    <span>Min match: <strong className="text-text">{(p.min_match_ratio * 100).toFixed(0)}%</strong></span>
                   </div>
                 </div>
               ))}
@@ -257,17 +257,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
         {activeTab === 'builder' && isAdmin && (
           <div className="space-y-6 pt-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-3 bg-slate-50 p-5 rounded-xl border border-slate-200">
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">Profile Attributes</h3>
+              <div className="space-y-3 bg-surface-alt p-5 rounded-xl border border-surface-border">
+                <h3 className="text-xs font-bold text-text uppercase tracking-wider mb-2">Profile Attributes</h3>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Profile Name</label>
-                  <input type="text" value={pName} onChange={(e) => setPName(e.target.value)} className="w-full text-xs bg-white border border-slate-300 rounded p-2 text-slate-900 font-medium" />
+                  <label className="block text-[11px] font-bold text-text-secondary mb-1">Profile Name</label>
+                  <input type="text" value={pName} onChange={(e) => setPName(e.target.value)} className="w-full text-xs bg-surface border border-surface-border rounded p-2 text-text font-medium input-brand" />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">Profile Type</label>
-                  <select value={pType} onChange={(e) => setPType(e.target.value as ProfileType)} className="w-full text-xs bg-white border border-slate-300 rounded p-2 text-slate-900 font-medium">
+                  <label className="block text-[11px] font-bold text-text-secondary mb-1">Profile Type</label>
+                  <select value={pType} onChange={(e) => setPType(e.target.value as ProfileType)} className="w-full text-xs bg-surface border border-surface-border rounded p-2 text-text font-medium input-brand">
                     <option value="regex">Regex Named Groups</option>
                     <option value="json">Structured JSON</option>
                     <option value="delimited">Delimited (CSV/TSV)</option>
@@ -275,64 +275,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  <label className="block text-[11px] font-bold text-text-secondary mb-1">
                     {pType === 'delimited' ? 'Delimiter character' : 'Pattern / RegEx'}
                   </label>
-                  <textarea rows={3} value={pPattern} onChange={(e) => setPPattern(e.target.value)} className="w-full text-xs bg-white border border-slate-300 rounded p-2 font-mono text-slate-900" />
+                  <textarea rows={3} value={pPattern} onChange={(e) => setPPattern(e.target.value)} className="w-full text-xs bg-surface border border-surface-border rounded p-2 font-mono text-text input-brand" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500">TS Field</label>
-                    <input type="text" value={pTsField} onChange={(e) => setPTsField(e.target.value)} className="w-full text-xs bg-white border border-slate-300 rounded p-1.5 font-mono" />
+                    <label className="block text-[10px] font-bold text-text-muted">TS Field</label>
+                    <input type="text" value={pTsField} onChange={(e) => setPTsField(e.target.value)} className="w-full text-xs bg-surface border border-surface-border rounded p-1.5 font-mono input-brand" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500">LVL Field</label>
-                    <input type="text" value={pLvlField} onChange={(e) => setPLvlField(e.target.value)} className="w-full text-xs bg-white border border-slate-300 rounded p-1.5 font-mono" />
+                    <label className="block text-[10px] font-bold text-text-muted">LVL Field</label>
+                    <input type="text" value={pLvlField} onChange={(e) => setPLvlField(e.target.value)} className="w-full text-xs bg-surface border border-surface-border rounded p-1.5 font-mono input-brand" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500">MSG Field</label>
-                    <input type="text" value={pMsgField} onChange={(e) => setPMsgField(e.target.value)} className="w-full text-xs bg-white border border-slate-300 rounded p-1.5 font-mono" />
+                    <label className="block text-[10px] font-bold text-text-muted">MSG Field</label>
+                    <input type="text" value={pMsgField} onChange={(e) => setPMsgField(e.target.value)} className="w-full text-xs bg-surface border border-surface-border rounded p-1.5 font-mono input-brand" />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500">Component Field</label>
-                    <input type="text" value={pComponentField} onChange={(e) => setPComponentField(e.target.value)} className="w-full text-xs bg-white border border-slate-300 rounded p-1.5 font-mono" />
+                    <label className="block text-[10px] font-bold text-text-muted">Component Field</label>
+                    <input type="text" value={pComponentField} onChange={(e) => setPComponentField(e.target.value)} className="w-full text-xs bg-surface border border-surface-border rounded p-1.5 font-mono input-brand" />
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-4 bg-slate-900 p-5 rounded-xl text-white">
-                <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Live Pattern Sandbox (client-side preview only)</h3>
+              <div className="space-y-4 bg-sidebar p-5 rounded-xl text-white">
+                <h3 className="text-xs font-bold text-warning uppercase tracking-wider">Live Pattern Sandbox (client-side preview only)</h3>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-300 mb-1">Test Log Sample Line</label>
-                  <textarea rows={2} value={testLine} onChange={(e) => setTestLine(e.target.value)} className="w-full text-xs bg-slate-950 border border-slate-800 rounded p-2 font-mono text-slate-200" />
+                  <label className="block text-[11px] font-bold text-white/80 mb-1">Test Log Sample Line</label>
+                  <textarea rows={2} value={testLine} onChange={(e) => setTestLine(e.target.value)} className="w-full text-xs bg-sidebar border border-sidebar-border rounded p-2 font-mono text-white/80" />
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <button onClick={handleTestRegex} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded transition-all cursor-pointer shadow-2xs">
+                  <button onClick={handleTestRegex} className="flex items-center gap-1.5 px-4 py-2 bg-brand hover:bg-brand-hover text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-md shadow-brand/20">
                     <Play className="w-3.5 h-3.5" />
                     <span>Run Test Match</span>
                   </button>
-                  <button onClick={handleSaveProfile} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded transition-all cursor-pointer shadow-2xs">
+                  <button onClick={handleSaveProfile} className="flex items-center gap-1.5 px-4 py-2 bg-success hover:bg-success/90 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-md shadow-success/20">
                     <Save className="w-3.5 h-3.5" />
                     <span>Save New Profile</span>
                   </button>
                 </div>
 
-                {testError && <div className="p-3 bg-rose-950/80 border border-rose-800 rounded text-xs text-rose-300">{testError}</div>}
+                {testError && <div className="p-3 bg-error/10 border border-error/30 rounded text-xs text-error">{testError}</div>}
 
                 {testResult && (
                   <div className="space-y-1">
-                    <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Extracted Groups</div>
-                    <pre className="bg-slate-950 p-3 rounded border border-slate-800 text-[11px] font-mono text-emerald-300 max-h-40 overflow-y-auto">
+                    <div className="text-[10px] font-bold text-success uppercase tracking-wider">Extracted Groups</div>
+                    <pre className="bg-sidebar p-3 rounded border border-sidebar-border text-[11px] font-mono text-aquamarine max-h-40 overflow-y-auto">
                       {JSON.stringify(testResult, null, 2)}
                     </pre>
                   </div>
                 )}
 
-                {saveStatus && <div className="p-2.5 bg-emerald-950 border border-emerald-800 rounded text-xs text-emerald-400 font-semibold">{saveStatus}</div>}
-                {saveError && <div className="p-2.5 bg-rose-950 border border-rose-800 rounded text-xs text-rose-300 font-semibold">{saveError}</div>}
+                {saveStatus && <div className="p-2.5 bg-success-light border border-success/30 rounded text-xs text-success font-semibold">{saveStatus}</div>}
+                {saveError && <div className="p-2.5 bg-error-light border border-error/30 rounded text-xs text-error font-semibold">{saveError}</div>}
               </div>
             </div>
           </div>

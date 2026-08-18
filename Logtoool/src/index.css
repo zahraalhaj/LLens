@@ -1,1 +1,397 @@
 @import "tailwindcss";
+
+@theme {
+  /* ─── Brand / Primary ─── */
+  --color-brand: #052460;
+  --color-brand-hover: #036FD0;
+  --color-brand-pressed: #00AEEF;
+  --color-brand-light: #9CC4E4;
+
+  /* ─── Surfaces ─── */
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F9F9F9;
+  --color-surface-border: #E7E7E7;
+  --color-surface-disabled: #F0F0F0;
+
+  /* ─── Text ─── */
+  --color-text: #2A2F34;
+  --color-text-secondary: #949799;
+  --color-text-muted: #949799;
+
+  /* ─── Sidebar ─── */
+  --color-sidebar: #15171A;
+  --color-sidebar-hover: #1E2125;
+  --color-sidebar-text: #949799;
+  --color-sidebar-text-active: #FFFFFF;
+  --color-sidebar-border: #2A2F34;
+
+  /* ─── System / Status ─── */
+  --color-success: #54C029;
+  --color-success-light: #EAFBE4;
+  --color-warning: #FF8800;
+  --color-warning-light: #FFF4E6;
+  --color-error: #FF2F2F;
+  --color-error-light: #FFEAEA;
+  --color-notice: #F8E71C;
+
+  /* ─── Accent / Data Viz ─── */
+  --color-visionary: #2398C9;
+  --color-visionary-light: #9CC4E4;
+  --color-aquamarine: #04ADA4;
+  --color-aquamarine-light: #80E3E2;
+  --color-indigo: #3C4B72;
+  --color-indigo-light: #9DA5B8;
+  --color-thunderstorm: #8892A1;
+  --color-thunderstorm-light: #B2BBC2;
+
+  /* ─── Chart Severity ─── */
+  --color-sev-critical: #FF2F2F;
+  --color-sev-error: #FF8800;
+  --color-sev-warn: #F8E71C;
+  --color-sev-info: #2398C9;
+  --color-sev-debug: #8892A1;
+  --color-sev-unknown: #949799;
+
+  /* ─── Font ─── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ─── Base ─── */
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+/* ─── Focus ring ─── */
+*:focus-visible {
+  outline: 2px solid var(--color-brand-hover);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Smooth transitions on interactive elements ─── */
+button, a, input, select, textarea {
+  transition-property: background-color, color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ─── Custom scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* ─── Sidebar scrollbar override (dark) ─── */
+aside::-webkit-scrollbar-thumb {
+  background: #3A3F44;
+}
+aside::-webkit-scrollbar-thumb:hover {
+  background: #4A4F54;
+}
+
+/* ─── Table row hover ─── */
+.table-row-brand:hover {
+  background-color: rgba(5, 36, 96, 0.03);
+}
+
+/* ─── Subtle brand glow for cards ─── */
+.card-brand-glow {
+  box-shadow: 0 0 0 1px rgba(5, 36, 96, 0.04), 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.card-brand-glow:hover {
+  box-shadow: 0 0 0 1px rgba(5, 36, 96, 0.08), 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ─── Sidebar active indicator ─── */
+.sidebar-active-indicator {
+  position: relative;
+}
+.sidebar-active-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--color-brand-hover);
+}
+
+/* ─── Badge pulse ─── */
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.badge-pulse {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Gradient accent for login/welcome screens ─── */
+.bg-brand-gradient {
+  background: linear-gradient(135deg, #052460 0%, #036FD0 50%, #00AEEF 100%);
+}
+
+/* ─── Input focus enhancement ─── */
+.input-brand:focus {
+  border-color: var(--color-brand-hover);
+  box-shadow: 0 0 0 3px rgba(3, 111, 208, 0.12);
+}
+
+/* ─── Drag active pulse ─── */
+@keyframes drag-pulse {
+  0%, 100% { border-color: var(--color-brand-hover); }
+  50% { border-color: var(--color-brand-pressed); }
+}
+.drag-active {
+  animation: drag-pulse 1s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CYBERPUNK THEME — neon-soaked dark futuristic design
+   Uses the project's brand palette, pushed to max contrast.
+   Applied when <html class="theme-observatory"> is set.
+   ═══════════════════════════════════════════════════════ */
+
+.theme-observatory {
+  /* ─── Brand / Primary ─── */
+  --color-brand: #036FD0;
+  --color-brand-hover: #00AEEF;
+  --color-brand-pressed: #052460;
+  --color-brand-light: rgba(0, 174, 239, 0.12);
+
+  /* ─── Surfaces (deep dark) ─── */
+  --color-surface: #0a0c10;
+  --color-surface-alt: #10131a;
+  --color-surface-border: #1a1f2e;
+  --color-surface-disabled: #141822;
+
+  /* ─── Text ─── */
+  --color-text: #e2e8f0;
+  --color-text-secondary: #7a8599;
+  --color-text-muted: #3d4659;
+
+  /* ─── Sidebar ─── */
+  --color-sidebar: #06080c;
+  --color-sidebar-hover: #0d111a;
+  --color-sidebar-text: #7a8599;
+  --color-sidebar-text-active: #00AEEF;
+  --color-sidebar-border: #1a1f2e;
+
+  /* ─── System / Status ─── */
+  --color-success: #54C029;
+  --color-success-light: rgba(84, 192, 41, 0.1);
+  --color-warning: #FF8800;
+  --color-warning-light: rgba(255, 136, 0, 0.1);
+  --color-error: #FF2F2F;
+  --color-error-light: rgba(255, 47, 47, 0.1);
+  --color-notice: #F8E71C;
+
+  /* ─── Accent / Data Viz ─── */
+  --color-visionary: #2398C9;
+  --color-visionary-light: rgba(35, 152, 201, 0.1);
+  --color-aquamarine: #04ADA4;
+  --color-aquamarine-light: rgba(4, 173, 164, 0.1);
+  --color-indigo: #3C4B72;
+  --color-indigo-light: rgba(60, 75, 114, 0.15);
+  --color-thunderstorm: #8892A1;
+  --color-thunderstorm-light: rgba(136, 146, 161, 0.1);
+
+  /* ─── Chart Severity ─── */
+  --color-sev-critical: #FF2F2F;
+  --color-sev-error: #FF8800;
+  --color-sev-warn: #F8E71C;
+  --color-sev-info: #00AEEF;
+  --color-sev-debug: #8892A1;
+  --color-sev-unknown: #7a8599;
+
+  /* ─── Font ─── */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ─── Cyberpunk: body background ─── */
+.theme-observatory body {
+  background-color: #0a0c10;
+}
+
+/* ─── Cyberpunk: scrollbar ─── */
+.theme-observatory ::-webkit-scrollbar-thumb {
+  background: #1e2433;
+}
+.theme-observatory ::-webkit-scrollbar-thumb:hover {
+  background: #2d3548;
+}
+
+/* ─── Cyberpunk: sidebar — scan lines + radial glow ─── */
+.theme-observatory aside {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 174, 239, 0.012) 2px,
+      rgba(0, 174, 239, 0.012) 4px
+    ),
+    radial-gradient(circle at 50% 0%, rgba(3, 111, 208, 0.05) 0%, transparent 60%);
+  background-size: 100% 4px, 100% 100%;
+}
+
+/* ─── Cyberpunk: sidebar active glow ─── */
+.theme-observatory .sidebar-active-indicator::before {
+  background: #00AEEF;
+  box-shadow: 0 0 10px #00AEEF, 0 0 20px rgba(0, 174, 239, 0.3);
+}
+
+/* ─── Cyberpunk: card glow ─── */
+.theme-observatory .card-brand-glow {
+  box-shadow:
+    0 0 0 1px rgba(0, 174, 239, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(0, 174, 239, 0.03);
+}
+.theme-observatory .card-brand-glow:hover {
+  box-shadow:
+    0 0 0 1px rgba(0, 174, 239, 0.25),
+    0 0 20px rgba(0, 174, 239, 0.08),
+    0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* ─── Cyberpunk: table row hover ─── */
+.theme-observatory .table-row-brand:hover {
+  background-color: rgba(0, 174, 239, 0.04);
+}
+
+/* ─── Cyberpunk: table rows — neon left border ─── */
+.theme-observatory tbody tr:hover {
+  box-shadow: inset 3px 0 0 #036FD0, inset 0 0 8px rgba(3, 111, 208, 0.08);
+}
+
+/* ─── Cyberpunk: focus ring ─── */
+.theme-observatory *:focus-visible {
+  outline-color: #00AEEF;
+  box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.25), 0 0 8px rgba(0, 174, 239, 0.15);
+}
+
+/* ─── Cyberpunk: input focus ─── */
+.theme-observatory .input-brand:focus {
+  border-color: #00AEEF;
+  box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.15), 0 0 12px rgba(0, 174, 239, 0.08);
+}
+
+/* ─── Cyberpunk: brand gradient ─── */
+.theme-observatory .bg-brand-gradient {
+  background: linear-gradient(135deg, #052460 0%, #036FD0 50%, #00AEEF 100%);
+}
+
+/* ─── Cyberpunk: drag active ─── */
+.theme-observatory .drag-active {
+  animation: drag-pulse-cyber 1s ease-in-out infinite;
+}
+@keyframes drag-pulse-cyber {
+  0%, 100% {
+    border-color: #036FD0;
+    box-shadow: 0 0 15px rgba(3, 111, 208, 0.25), inset 0 0 15px rgba(3, 111, 208, 0.05);
+  }
+  50% {
+    border-color: #00AEEF;
+    box-shadow: 0 0 25px rgba(0, 174, 239, 0.3), inset 0 0 25px rgba(0, 174, 239, 0.05);
+  }
+}
+
+/* ─── Cyberpunk: badge pulse ─── */
+.theme-observatory .badge-pulse {
+  animation: badge-pulse-cyber 1.5s ease-in-out infinite;
+}
+@keyframes badge-pulse-cyber {
+  0%, 100% { opacity: 1; text-shadow: 0 0 6px currentColor; }
+  50% { opacity: 0.65; text-shadow: none; }
+}
+
+/* ─── Cyberpunk: monospace ─── */
+.theme-observatory .font-mono {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ─── Cyberpunk: status dot glow ─── */
+.theme-observatory .animate-pulse {
+  box-shadow: 0 0 6px currentColor, 0 0 12px currentColor;
+}
+
+/* ─── Cyberpunk: sidebar scrollbar ─── */
+.theme-observatory aside::-webkit-scrollbar-thumb {
+  background: #1a1f2e;
+}
+.theme-observatory aside::-webkit-scrollbar-thumb:hover {
+  background: #1e2433;
+}
+
+/* ─── Cyberpunk: dot grid on surfaces ─── */
+.theme-observatory .bg-surface-alt {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(0, 174, 239, 0.02) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+/* ─── Cyberpunk: spinner ─── */
+.theme-observatory .animate-spin {
+  color: #00AEEF;
+  filter: drop-shadow(0 0 4px rgba(0, 174, 239, 0.4));
+}
+
+/* ─── Cyberpunk: neon text glow ─── */
+.theme-observatory .text-brand {
+  text-shadow: 0 0 8px rgba(3, 111, 208, 0.35);
+}
+.theme-observatory .text-success {
+  text-shadow: 0 0 8px rgba(84, 192, 41, 0.3);
+}
+.theme-observatory .text-error {
+  text-shadow: 0 0 8px rgba(255, 47, 47, 0.35);
+}
+.theme-observatory .text-warning {
+  text-shadow: 0 0 8px rgba(255, 136, 0, 0.3);
+}
+
+/* ─── Cyberpunk: buttons get neon border glow ─── */
+.theme-observatory button.bg-brand,
+.theme-observatory button[class*="bg-brand"] {
+  box-shadow: 0 0 12px rgba(3, 111, 208, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.theme-observatory button.bg-brand:hover,
+.theme-observatory button[class*="bg-brand"]:hover {
+  box-shadow: 0 0 20px rgba(0, 174, 239, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Cyberpunk: smooth theme transition ─── */
+.theme-observatory *,
+.theme-observatory *::before,
+.theme-observatory *::after {
+  transition-property: background-color, color, border-color, box-shadow, opacity, transform;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.theme-observatory button,
+.theme-observatory a,
+.theme-observatory input,
+.theme-observatory select,
+.theme-observatory textarea {
+  transition-duration: 150ms;
+}

@@ -10,7 +10,6 @@ import {
   ActivitySquare,
   Users as UsersIcon,
   ServerCog,
-  LogOut,
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -22,10 +21,9 @@ interface SidebarProps {
   criticalCount: number;
   user: User;
   ollamaAvailable: boolean;
-  onLogout: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criticalCount, user, ollamaAvailable, onLogout }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criticalCount, user, ollamaAvailable }) => {
   const navItems = [
     { id: 'upload' as TabType, label: 'Upload & Ingest', icon: Upload, badge: null },
     { id: 'explore' as TabType, label: 'Explore Events', icon: Search, badge: null },
@@ -40,23 +38,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criti
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 min-h-screen text-slate-300">
+    <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col justify-between shrink-0 min-h-screen text-sidebar-text">
       <div>
-        <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-          <div className="w-9 h-9 bg-blue-600 text-white font-extrabold text-sm rounded-lg flex items-center justify-center shadow-md">
-            LT
+        {/* Brand */}
+        <div className="p-5 border-b border-sidebar-border flex items-center gap-3">
+          <div className="w-9 h-9 bg-brand text-white font-extrabold text-sm rounded-lg flex items-center justify-center shadow-lg shadow-brand/20">
+            LL
           </div>
           <div>
-            <div className="font-extrabold text-white tracking-wide text-sm">LOGTOOL</div>
-            <div className="text-[10px] font-medium text-slate-400">Internal Log Analytics</div>
+            <div className="font-extrabold text-white tracking-wide text-sm">LLENS</div>
+            <div className="text-[10px] font-medium text-sidebar-text">Log Analysis Platform</div>
           </div>
         </div>
 
+        {/* Navigation */}
         <div className="px-3 py-4">
-          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">
+          <div className="text-[10px] font-bold text-sidebar-text uppercase tracking-wider px-3 mb-2 opacity-60">
             Navigation Menu
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -64,22 +64,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criti
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 ${
                     isActive
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-brand text-white shadow-md shadow-brand/25 sidebar-active-indicator'
+                      : 'text-sidebar-text hover:text-white hover:bg-sidebar-hover'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-sidebar-text'}`} />
                     <span>{item.label}</span>
                   </div>
                   {item.badge && (
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         item.badge === 'AI'
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          ? 'bg-brand-pressed/20 text-brand-pressed border border-brand-pressed/30'
+                          : 'bg-error/20 text-error border border-error/30 badge-pulse'
                       }`}
                     >
                       {item.badge}
@@ -89,35 +89,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criti
               );
             })}
           </nav>
-        </div>
-      </div>
-
-      <div className="p-4 border-t border-slate-800/80 space-y-3">
-        <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-          <div className="flex items-center justify-between text-[11px] mb-1">
-            <span className="text-slate-400 font-medium">Log Engine</span>
-            <span className="flex items-center gap-1 text-emerald-400 font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              READY
-            </span>
-          </div>
-          <div className="text-[10px] font-mono text-slate-500 truncate">
-            SQLite (local) + Ollama {ollamaAvailable ? '(online)' : '(offline)'}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between px-1">
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-200 truncate">{user.username}</div>
-            <div className="text-[10px] text-slate-500 capitalize">{user.role}</div>
-          </div>
-          <button
-            onClick={onLogout}
-            title="Sign out"
-            className="p-2 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </aside>

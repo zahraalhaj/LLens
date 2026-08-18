@@ -94,45 +94,45 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
   const getLevelBadge = (lvl: LogLevel) => {
     switch (lvl) {
       case 'CRITICAL':
-        return 'bg-red-100 text-red-800 border-red-200 font-extrabold';
+        return 'bg-error/10 text-error border border-error/20 font-extrabold';
       case 'ERROR':
-        return 'bg-rose-100 text-rose-700 border-rose-200 font-bold';
+        return 'bg-warning/10 text-warning border border-warning/20 font-bold';
       case 'WARN':
-        return 'bg-amber-100 text-amber-800 border-amber-200 font-bold';
+        return 'bg-notice/20 text-warning border border-warning/20 font-bold';
       case 'INFO':
-        return 'bg-blue-100 text-blue-700 border-blue-200 font-semibold';
+        return 'bg-brand/[0.08] text-brand border border-brand/15 font-semibold';
       case 'DEBUG':
-        return 'bg-slate-100 text-slate-600 border-slate-200 font-medium';
+        return 'bg-surface-alt text-text-muted border border-surface-border font-medium';
       default:
-        return 'bg-slate-100 text-slate-600 border-slate-200';
+        return 'bg-surface-alt text-text-muted border border-surface-border';
     }
   };
 
   return (
     <div className="space-y-6">
       {/* Search & Filter Bar */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+      <div className="bg-surface p-5 rounded-2xl border border-surface-border card-brand-glow space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-500" />
-            <h2 className="text-sm font-bold text-slate-900">Log Event Explorer & Server-Side Search</h2>
+            <Filter className="w-4 h-4 text-text-muted" />
+            <h2 className="text-sm font-bold text-text">Log Event Explorer & Server-Side Search</h2>
           </div>
-          <div className="text-xs text-slate-500 font-medium">
-            Showing <strong className="text-slate-900">{events.length}</strong> of <strong className="text-slate-900">{totalCount.toLocaleString()}</strong> matching records
+          <div className="text-xs text-text-muted font-medium">
+            Showing <strong className="text-text">{events.length}</strong> of <strong className="text-text">{totalCount.toLocaleString()}</strong> matching records
           </div>
         </div>
 
         {/* Severity Level Filter Buttons */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          <span className="text-xs font-bold text-slate-500 mr-1">Severity:</span>
+          <span className="text-xs font-bold text-text-muted mr-1">Severity:</span>
           {['ALL', 'CRITICAL', 'ERROR', 'WARN', 'INFO', 'DEBUG'].map((lvl) => (
             <button
               key={lvl}
               onClick={() => { setSelectedLevel(lvl); setPage(1); }}
               className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
                 selectedLevel === lvl
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+                  ? 'bg-brand text-white shadow-2xs'
+                  : 'bg-surface-alt text-text-secondary hover:bg-surface-alt border border-surface-border'
               }`}
             >
               {lvl}
@@ -141,13 +141,13 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
         </div>
 
         {/* Dropdowns & Keyword Search */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-surface-border">
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Source System</label>
+            <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Source System</label>
             <select
               value={selectedSource}
               onChange={(e) => { setSelectedSource(e.target.value); setPage(1); }}
-              className="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full text-xs bg-surface-alt border border-surface-border rounded-lg p-2 font-medium text-text input-brand"
             >
               <option value="ALL">All Sources</option>
               {sources.map((s) => (
@@ -157,11 +157,11 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Component / Logger</label>
+            <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Component / Logger</label>
             <select
               value={selectedComponent}
               onChange={(e) => { setSelectedComponent(e.target.value); setPage(1); }}
-              className="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg p-2 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full text-xs bg-surface-alt border border-surface-border rounded-lg p-2 font-medium text-text input-brand"
             >
               <option value="ALL">All Components</option>
               {components.map((c) => (
@@ -171,16 +171,16 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search Keywords</label>
+            <label className="block text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1">Search Keywords</label>
             <div className="relative">
               <input
                 type="text"
                 placeholder="Search error, exception, IP address..."
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                className="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-xs bg-surface-alt border border-surface-border rounded-lg pl-8 pr-3 py-2 font-medium text-text input-brand"
               />
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-text-muted absolute left-2.5 top-2.5" />
             </div>
           </div>
         </div>
@@ -190,10 +190,10 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Log Events Table */}
         <div className={`space-y-4 transition-all ${selectedEvent ? 'lg:col-span-7' : 'lg:col-span-12'}`}>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="bg-surface rounded-2xl border border-surface-border card-brand-glow overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+                <thead className="bg-surface-alt text-text-secondary font-bold uppercase tracking-wider text-[10px] border-b border-surface-border">
                   <tr>
                     <th className="px-3.5 py-2.5">Line</th>
                     <th className="px-3.5 py-2.5">Timestamp (UTC)</th>
@@ -204,10 +204,10 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                     <th className="px-3.5 py-2.5 text-right">Inspect</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-slate-800 font-medium">
+                <tbody className="divide-y divide-surface-border text-text font-medium">
                   {events.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500 italic">
+                      <td colSpan={7} className="px-4 py-8 text-center text-text-muted italic">
                         No log events matching specified filters. Try selecting "ALL" severity or clearing search terms.
                       </td>
                     </tr>
@@ -218,12 +218,12 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                         <tr
                           key={evt.event_id}
                           onClick={() => handleSelectEvent(evt)}
-                          className={`hover:bg-blue-50/60 cursor-pointer transition-colors ${
-                            isSelected ? 'bg-blue-50/90 font-semibold' : ''
+                          className={`hover:bg-brand/[0.04] cursor-pointer transition-colors ${
+                            isSelected ? 'bg-brand/[0.06] font-semibold' : ''
                           }`}
                         >
-                          <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-400">{evt.line_no}</td>
-                          <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 font-mono text-[11px] text-text-muted">{evt.line_no}</td>
+                          <td className="px-3.5 py-2.5 font-mono text-[11px] text-text-secondary whitespace-nowrap">
                             {evt.ts_utc ? evt.ts_utc.substring(0, 19).replace('T', ' ') : evt.ts_raw}
                           </td>
                           <td className="px-3.5 py-2.5">
@@ -231,17 +231,17 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                               {evt.level}
                             </span>
                           </td>
-                          <td className="px-3.5 py-2.5 font-semibold text-slate-800 truncate max-w-[120px]">
+                          <td className="px-3.5 py-2.5 font-semibold text-text truncate max-w-[120px]">
                             {evt.source_system}
                           </td>
-                          <td className="px-3.5 py-2.5 text-slate-600 font-mono text-[11px] truncate max-w-[120px]">
+                          <td className="px-3.5 py-2.5 text-text-secondary font-mono text-[11px] truncate max-w-[120px]">
                             {evt.component}
                           </td>
-                          <td className="px-3.5 py-2.5 text-slate-900 truncate max-w-[280px]">
+                          <td className="px-3.5 py-2.5 text-text truncate max-w-[280px]">
                             {evt.message}
                           </td>
                           <td className="px-3.5 py-2.5 text-right">
-                            <button className="text-blue-600 hover:text-blue-800 p-1">
+                            <button className="text-brand hover:text-brand-hover p-1">
                               <Eye className="w-4 h-4" />
                             </button>
                           </td>
@@ -254,22 +254,22 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
             </div>
 
             {/* Pagination Controls */}
-            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+            <div className="px-4 py-3 bg-surface-alt border-t border-surface-border flex items-center justify-between text-xs text-text-secondary">
               <div>
-                Page <strong className="text-slate-900">{page}</strong> of <strong className="text-slate-900">{totalPages}</strong>
+                Page <strong className="text-text">{page}</strong> of <strong className="text-text">{totalPages}</strong>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded font-bold text-slate-700 transition-all cursor-pointer"
+                  className="px-2.5 py-1 bg-surface hover:bg-surface-alt disabled:opacity-40 border border-surface-border rounded font-bold text-text transition-all cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded font-bold text-slate-700 transition-all cursor-pointer"
+                  className="px-2.5 py-1 bg-surface hover:bg-surface-alt disabled:opacity-40 border border-surface-border rounded font-bold text-text transition-all cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -281,88 +281,88 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
         {/* Event Inspector & AI Explainer Panel */}
         {selectedEvent && (
           <div className="lg:col-span-5 space-y-4">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4 sticky top-20 max-h-[85vh] overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="bg-surface rounded-2xl border border-surface-border card-brand-glow p-5 space-y-4 sticky top-20 max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-surface-border pb-3">
                 <div className="flex items-center gap-2">
-                  <FileCode className="w-5 h-5 text-blue-600" />
-                  <h3 className="font-bold text-sm text-slate-900">Log Event Inspector</h3>
+                  <FileCode className="w-5 h-5 text-brand" />
+                  <h3 className="font-bold text-sm text-text">Log Event Inspector</h3>
                 </div>
                 <button
                   onClick={() => setSelectedEvent(null)}
-                  className="text-xs font-bold text-slate-400 hover:text-slate-600 p-1"
+                  className="text-xs font-bold text-text-muted hover:text-text-secondary p-1"
                 >
                   ✕ Close
                 </button>
               </div>
 
               {/* Header Badge & Level */}
-              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1.5">
+              <div className="bg-surface-alt p-3 rounded-lg border border-surface-border space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className={`px-2 py-0.5 rounded text-[10px] border ${getLevelBadge(selectedEvent.level)}`}>
                     {selectedEvent.level}
                   </span>
-                  <span className="text-[11px] font-mono text-slate-500">
+                  <span className="text-[11px] font-mono text-text-muted">
                     Line {selectedEvent.line_no} ({selectedEvent.file_name})
                   </span>
                 </div>
-                <div className="text-xs font-bold text-slate-900 break-words font-mono">
+                <div className="text-xs font-bold text-text break-words font-mono">
                   {selectedEvent.message}
                 </div>
               </div>
 
               {/* AI Root Cause Explainer Action */}
-              <div className="bg-slate-900 rounded-xl p-4 text-white shadow-md space-y-3">
+              <div className="bg-sidebar rounded-2xl p-4 text-white shadow-md space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center font-bold text-xs">
+                    <div className="w-6 h-6 bg-brand rounded-full flex items-center justify-center font-bold text-xs">
                       🤖
                     </div>
                     <span className="text-xs font-bold tracking-wide">AI Root Cause Assistant</span>
                   </div>
-                  <span className="text-[10px] text-amber-400 font-semibold border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] text-brand-pressed font-semibold border border-brand-pressed/30 bg-brand-pressed/10 px-2 py-0.5 rounded-full">
                     Ollama
                   </span>
                 </div>
 
-                <p className="text-[11px] text-slate-300 leading-normal">
+                <p className="text-[11px] text-white/70 leading-normal">
                   Perform automated deep context analysis across surrounding log lines to pinpoint root causes and remediation steps.
                 </p>
 
                 <button
                   onClick={handleExplain}
                   disabled={isExplaining}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-sm"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-brand hover:bg-brand-hover text-white font-bold text-xs rounded-lg transition-all cursor-pointer"
                 >
-                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <Sparkles className="w-4 h-4 text-brand-pressed" />
                   <span>{isExplaining ? 'Analyzing with Ollama...' : 'Explain Root Cause with AI'}</span>
                 </button>
 
                 {explainError && (
-                  <div className="text-[11px] font-semibold text-rose-300 bg-rose-950/40 border border-rose-800 rounded-lg px-2.5 py-1.5">
+                  <div className="text-[11px] font-semibold text-error bg-error/20 border border-error/30 rounded-lg px-2.5 py-1.5">
                     {explainError}
                   </div>
                 )}
 
                 {aiExplanation && (
-                  <div className="pt-3 border-t border-slate-800 space-y-2.5 text-xs">
-                    <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
-                      <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">Probable Cause</div>
-                      <div className="font-semibold text-slate-100">{aiExplanation.probable_cause}</div>
+                  <div className="pt-3 border-t border-white/10 space-y-2.5 text-xs">
+                    <div className="bg-white/10 p-2.5 rounded-lg border border-white/10">
+                      <div className="text-[10px] font-bold text-warning uppercase tracking-wider mb-1">Probable Cause</div>
+                      <div className="font-semibold text-white">{aiExplanation.probable_cause}</div>
                     </div>
 
                     <div className="space-y-1">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Technical Explanation</div>
-                      <div className="text-slate-300 text-[11px] leading-relaxed bg-slate-950 p-2.5 rounded border border-slate-800">
+                      <div className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Technical Explanation</div>
+                      <div className="text-white/70 text-[11px] leading-relaxed bg-sidebar p-2.5 rounded border border-white/10">
                         {aiExplanation.explanation}
                       </div>
                     </div>
 
                     <div className="space-y-1">
-                      <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Suggested Next Steps</div>
+                      <div className="text-[10px] font-bold text-success uppercase tracking-wider">Suggested Next Steps</div>
                       <ul className="space-y-1">
                         {aiExplanation.suggested_next_steps.map((step, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5 text-[11px] text-slate-200 bg-slate-800/40 p-1.5 rounded">
-                            <span className="text-emerald-400 font-bold">•</span>
+                          <li key={idx} className="flex items-start gap-1.5 text-[11px] text-white/80 bg-white/5 p-1.5 rounded">
+                            <span className="text-success font-bold">•</span>
                             <span>{step}</span>
                           </li>
                         ))}
@@ -374,28 +374,28 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
 
               {/* Raw JSON Attributes */}
               <div>
-                <div className="text-xs font-bold text-slate-700 mb-1">Parsed JSON Fields</div>
-                <pre className="bg-slate-950 text-slate-200 text-[11px] p-3 rounded-lg overflow-x-auto font-mono max-h-40">
+                <div className="text-xs font-bold text-text mb-1">Parsed JSON Fields</div>
+                <pre className="bg-sidebar text-white/80 text-[11px] p-3 rounded-lg overflow-x-auto font-mono max-h-40">
                   {JSON.stringify(selectedEvent, null, 2)}
                 </pre>
               </div>
 
               {/* Surrounding Raw Log Context */}
               <div>
-                <div className="text-xs font-bold text-slate-700 mb-1">
+                <div className="text-xs font-bold text-text mb-1">
                   Surrounding Raw Log Context (±5 Lines)
                 </div>
-                <div className="bg-slate-950 rounded-lg p-3 font-mono text-[11px] text-slate-300 space-y-1.5 max-h-48 overflow-y-auto border border-slate-800">
+                <div className="bg-sidebar rounded-lg p-3 font-mono text-[11px] text-white/70 space-y-1.5 max-h-48 overflow-y-auto border border-white/10">
                   {contextEvents.map((ctx) => {
                     const isTarget = ctx.event_id === selectedEvent.event_id;
                     return (
                       <div
                         key={ctx.event_id}
                         className={`p-1.5 rounded text-[10px] leading-normal ${
-                          isTarget ? 'bg-blue-900/60 text-blue-200 border-l-2 border-blue-400 font-bold' : 'hover:bg-slate-900'
+                          isTarget ? 'bg-brand/20 text-brand-pressed border-l-2 border-brand-pressed font-bold' : 'hover:bg-white/5'
                         }`}
                       >
-                        <span className="text-slate-500 mr-2">Line {ctx.line_no}</span>
+                        <span className="text-white/50 mr-2">Line {ctx.line_no}</span>
                         <span>{ctx.raw}</span>
                       </div>
                     );

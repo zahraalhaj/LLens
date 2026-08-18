@@ -3,10 +3,12 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cart
 import { LogEvent, LogLevel } from '../types';
 import { Clock, Filter, BarChart2 } from 'lucide-react';
 import { api } from '../api';
+import { useChartColors } from '../theme/useChartColors';
 
 export const TimelineView: React.FC = () => {
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [chartType, setChartType] = useState<'bar' | 'area'>('bar');
+  const chartColors = useChartColors();
   const [selectedLevels, setSelectedLevels] = useState<Record<string, boolean>>({
     CRITICAL: true,
     ERROR: true,
@@ -51,11 +53,11 @@ export const TimelineView: React.FC = () => {
     }));
 
   const levelColors: Record<string, string> = {
-    CRITICAL: '#dc2626',
-    ERROR: '#ef4444',
-    WARN: '#f59e0b',
-    INFO: '#2563eb',
-    DEBUG: '#64748b'
+    CRITICAL: chartColors.sevCritical,
+    ERROR: chartColors.sevError,
+    WARN: chartColors.sevWarn,
+    INFO: chartColors.sevInfo,
+    DEBUG: chartColors.sevDebug
   };
 
   const toggleLevel = (lvl: string) => {
@@ -64,23 +66,23 @@ export const TimelineView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+      <div className="bg-surface p-6 rounded-2xl border border-surface-border shadow-2xs space-y-4 card-brand-glow">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-600" />
+            <h2 className="text-xl font-bold text-text flex items-center gap-2">
+              <Clock className="w-5 h-5 text-brand" />
               Interactive Log Event Volume Timeline
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-text-muted mt-0.5">
               5-minute time-bucketed event counts grouped by severity level across all ingested sources.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <div className="flex items-center gap-2 bg-surface-alt p-1 rounded-lg border border-surface-border">
             <button
               onClick={() => setChartType('bar')}
               className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                chartType === 'bar' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                chartType === 'bar' ? 'bg-surface text-text shadow-2xs' : 'text-text-secondary'
               }`}
             >
               Stacked Bar
@@ -88,7 +90,7 @@ export const TimelineView: React.FC = () => {
             <button
               onClick={() => setChartType('area')}
               className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                chartType === 'area' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                chartType === 'area' ? 'bg-surface text-text shadow-2xs' : 'text-text-secondary'
               }`}
             >
               Area Chart
@@ -97,8 +99,8 @@ export const TimelineView: React.FC = () => {
         </div>
 
         {/* Severity Toggles */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
-          <span className="text-xs font-bold text-slate-500 mr-2 flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-surface-border">
+          <span className="text-xs font-bold text-text-muted mr-2 flex items-center gap-1">
             <Filter className="w-3.5 h-3.5" /> Toggle Layers:
           </span>
           {Object.keys(selectedLevels).map((lvl) => {
@@ -109,8 +111,8 @@ export const TimelineView: React.FC = () => {
                 onClick={() => toggleLevel(lvl)}
                 className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
                   isSelected
-                    ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 opacity-60'
+                    ? 'bg-brand text-white border-brand shadow-2xs'
+                    : 'bg-surface-alt text-text-muted border-surface-border opacity-60'
                 }`}
               >
                 <span
@@ -126,18 +128,18 @@ export const TimelineView: React.FC = () => {
         {/* Recharts Timeline */}
         <div className="h-96 w-full pt-4">
           {chartData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400 italic text-xs">
+            <div className="h-full flex items-center justify-center text-text-muted italic text-xs">
               No log data available for timeline visualization. Upload log files or click "Load Samples".
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               {chartType === 'bar' ? (
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-                  <YAxis stroke="#64748b" fontSize={11} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.surfaceBorder} />
+                  <XAxis dataKey="time" stroke={chartColors.textSecondary} fontSize={11} />
+                  <YAxis stroke={chartColors.textSecondary} fontSize={11} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }}
+                    contentStyle={{ backgroundColor: chartColors.surface, borderRadius: '8px', border: `1px solid ${chartColors.surfaceBorder}`, color: chartColors.textSecondary, fontSize: '12px' }}
                   />
                   <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
                   {selectedLevels.CRITICAL && <Bar dataKey="CRITICAL" stackId="a" fill={levelColors.CRITICAL} />}
@@ -148,11 +150,11 @@ export const TimelineView: React.FC = () => {
                 </BarChart>
               ) : (
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-                  <YAxis stroke="#64748b" fontSize={11} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.surfaceBorder} />
+                  <XAxis dataKey="time" stroke={chartColors.textSecondary} fontSize={11} />
+                  <YAxis stroke={chartColors.textSecondary} fontSize={11} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }}
+                    contentStyle={{ backgroundColor: chartColors.surface, borderRadius: '8px', border: `1px solid ${chartColors.surfaceBorder}`, color: chartColors.textSecondary, fontSize: '12px' }}
                   />
                   <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
                   {selectedLevels.CRITICAL && <Area type="monotone" dataKey="CRITICAL" stackId="1" stroke={levelColors.CRITICAL} fill={levelColors.CRITICAL} />}

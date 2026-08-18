@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { ThemeProvider } from './theme/ThemeContext';
 import { Login } from './components/Login';
 import { ChangePassword } from './components/ChangePassword';
 import { Navbar } from './components/Navbar';
@@ -89,14 +90,13 @@ function AppShell() {
   const criticalCount = (stats?.severity_counts?.CRITICAL || 0) + (stats?.severity_counts?.ERROR || 0);
 
   return (
-    <div className="min-h-screen bg-slate-100 flex text-slate-900 font-sans antialiased">
+    <div className="min-h-screen bg-surface-alt flex text-text font-sans antialiased">
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         criticalCount={criticalCount}
         user={user}
         ollamaAvailable={ollamaAvailable}
-        onLogout={logout}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -106,9 +106,11 @@ function AppShell() {
           totalLogs={Object.values(stats?.severity_counts || {}).reduce((a: number, b: number) => a + b, 0)}
           ollamaAvailable={ollamaAvailable}
           canClear={user.role === 'admin'}
+          user={user}
+          onLogout={logout}
         />
 
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="flex-1 p-6 max-w-[1400px] w-full mx-auto space-y-6">
           {activeTab === 'upload' && (
             <UploadView
               profiles={profiles}
@@ -153,8 +155,8 @@ function AppRoot() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <div className="text-sm text-slate-500 font-medium">Loading…</div>
+      <div className="min-h-screen bg-surface-alt flex items-center justify-center">
+        <div className="text-sm text-text-secondary font-medium">Loading…</div>
       </div>
     );
   }
@@ -168,8 +170,10 @@ function AppRoot() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoot />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppRoot />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
