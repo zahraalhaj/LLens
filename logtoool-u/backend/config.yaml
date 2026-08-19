@@ -1,0 +1,20 @@
+max_upload_size_mb: 500
+ollama_url: "http://localhost:11434"
+ollama_model: "llama3.1:8b-instruct-q4_K_M"
+db_path: "data/logs.db"
+profiles_dir: "profiles"
+default_match_threshold: 0.8
+batch_size: 1000
+log_level: "INFO"
+
+# NOTE: the fields below are NOT read by the application. SMTP/alert-email
+# configuration comes exclusively from environment variables (see
+# backend/.env.example: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD,
+# ALERT_FROM_EMAIL, ALERT_EMAIL_TO), by design -- credentials shouldn't live
+# in a checked-in config file. These are left here only as a historical
+# note; remove them once nobody's confused by them anymore.
+smtp_host: "localhost"
+smtp_port: 587
+smtp_user: ""
+smtp_password: ""
+alert_email_to: "admin@example.com"

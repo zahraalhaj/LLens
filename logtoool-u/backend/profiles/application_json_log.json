@@ -1,0 +1,12 @@
+{
+  "name": "Application JSON Log",
+  "type": "json",
+  "pattern": "root",
+  "timestamp_field": "timestamp",
+  "level_field": "level",
+  "component_field": "service",
+  "message_field": "message",
+  "default_source_system": "app_backend",
+  "timezone": "UTC",
+  "min_match_ratio": 0.8
+}

@@ -1,0 +1,29 @@
+{
+  "name": "Apache Access Log",
+  "type": "regex",
+  "pattern": "^(?P<ip>\\S+) \\S+ \\S+ \\[(?P<timestamp>[^\\]]+)\\] \"(?P<message>(?P<method>\\S+) (?P<path>\\S+) [^\"]+)\" (?P<status>\\d{3}) (?P<bytes>\\S+)",
+  "timestamp_field": "timestamp",
+  "timestamp_format": null,
+  "level_field": "status",
+  "component_field": "method",
+  "message_field": "message",
+  "default_source_system": "apache",
+  "timezone": "UTC",
+  "min_match_ratio": 0.8,
+  "level_map": {
+    "200": "INFO",
+    "201": "INFO",
+    "204": "INFO",
+    "301": "INFO",
+    "302": "INFO",
+    "304": "INFO",
+    "400": "WARN",
+    "401": "WARN",
+    "403": "WARN",
+    "404": "WARN",
+    "500": "ERROR",
+    "502": "ERROR",
+    "503": "ERROR",
+    "504": "ERROR"
+  }
+}
