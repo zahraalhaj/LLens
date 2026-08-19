@@ -122,7 +122,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
           <button
             type="submit"
             disabled={creating}
-            className="px-3 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer"
+            className="px-3 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer"
           >
             {creating ? 'Creating…' : 'Create'}
           </button>

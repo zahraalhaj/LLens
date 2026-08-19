@@ -10,6 +10,7 @@ import { TimelineView } from './components/TimelineView';
 import { StatsView } from './components/StatsView';
 import { ProfilingView } from './components/ProfilingView';
 import { VPlusMonitoringView } from './components/VPlusMonitoringView';
+import { OtpProcessorView } from './components/OtpProcessorView';
 import { AlertsView } from './components/AlertsView';
 import { ChatView } from './components/ChatView';
 import { SettingsView } from './components/SettingsView';
@@ -133,6 +134,8 @@ function AppShell() {
           {activeTab === 'profiling' && <ProfilingView />}
 
           {activeTab === 'vplus' && <VPlusMonitoringView />}
+
+          {activeTab === 'otp-processor' && <OtpProcessorView />}
 
           {activeTab === 'alerts' && <AlertsView />}
 

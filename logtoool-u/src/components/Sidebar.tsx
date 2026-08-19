@@ -9,13 +9,14 @@ import {
   Terminal,
   ActivitySquare,
   Activity,
+  KeyRound,
   Users as UsersIcon,
   ServerCog,
   LogOut,
 } from 'lucide-react';
 import { User } from '../types';
 
-export type TabType = 'upload' | 'explore' | 'timeline' | 'stats' | 'profiling' | 'vplus' | 'alerts' | 'chat' | 'settings' | 'users' | 'control-center';
+export type TabType = 'upload' | 'explore' | 'timeline' | 'stats' | 'profiling' | 'vplus' | 'otp-processor' | 'alerts' | 'chat' | 'settings' | 'users' | 'control-center';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -34,6 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criti
     { id: 'stats' as TabType, label: 'Analytics & Stats', icon: Terminal, badge: null },
     { id: 'profiling' as TabType, label: 'Anomaly Insights', icon: ActivitySquare, badge: null },
     { id: 'vplus' as TabType, label: 'V+ Monitoring', icon: Activity, badge: null },
+    { id: 'otp-processor' as TabType, label: 'OTP Processor', icon: KeyRound, badge: null },
     { id: 'alerts' as TabType, label: 'Alerts Center', icon: BellRing, badge: criticalCount > 0 ? `${criticalCount} Critical` : null },
     { id: 'chat' as TabType, label: 'Chat With Logs', icon: MessageSquareCode, badge: ollamaAvailable ? 'AI' : null },
     { id: 'settings' as TabType, label: 'Profiles & Settings', icon: Settings, badge: null },

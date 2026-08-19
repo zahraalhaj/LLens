@@ -72,7 +72,7 @@ export const ProfilingView: React.FC = () => {
         <button
           onClick={handleRecompute}
           disabled={recomputing}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer self-start md:self-auto"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer self-start md:self-auto"
         >
           <RefreshCw className={`w-4 h-4 ${recomputing ? 'animate-spin' : ''}`} />
           Recompute now

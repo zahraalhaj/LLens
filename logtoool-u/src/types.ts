@@ -187,23 +187,35 @@ export interface PollResult {
 
 export interface VPlusDowntimeWindow {
   down_since: string;
-  recovered_at: string;
-  duration_minutes: number;
-  last_event_before_down: { component: string; correlation_id: string | null };
-  first_event_after_recovery: { component: string; correlation_id: string | null };
+  recovered_at: string | null;
+  duration_minutes: number | null;
+  unresponded_count: number;
+  sample_tracker_no: string | null;
+}
+
+export interface VPlusUnrespondedInput {
+  correlation_id: string;
+  tracker_no: string | null;
+  input_time: string;
 }
 
 export interface VPlusAvailabilityReport {
   status: 'healthy' | 'down' | 'no_data';
   message?: string;
-  gap_threshold_minutes: number;
-  total_events_analyzed?: number;
+  expected_response_ms: number;
+  gap_threshold_minutes?: number;
   window_start?: string;
   window_end?: string;
+  total_inputs_analyzed?: number;
+  responded_count?: number;
+  unresponded_count?: number;
+  unresponded_pct?: number;
+  delayed_count?: number;
+  delayed_pct?: number;
   downtime_windows: VPlusDowntimeWindow[];
   total_downtime_minutes?: number;
   currently_down: boolean | null;
-  minutes_since_last_event?: number | null;
+  worst_unresponded?: VPlusUnrespondedInput[];
 }
 
 export interface VPlusResponsePair {
@@ -263,9 +275,51 @@ export interface VPlusInvestigationSummary {
   most_affected_issuers: Record<string, number>;
 }
 
+export interface VPlusTransactionBreakdown {
+  status: 'ok' | 'no_data';
+  message?: string;
+  total_transactions?: number;
+  issuer_counts?: Record<string, number>;
+  status_counts?: Record<string, number>;
+}
+
 export interface VPlusFullReport {
   investigation_summary: VPlusInvestigationSummary;
   availability: VPlusAvailabilityReport;
   response_times: VPlusResponseTimeReport;
   sms_analysis: VPlusSmsReport;
+  transaction_breakdown: VPlusTransactionBreakdown;
+}
+
+// -- OTP Online Processor analysis (backend/analysis/otp_processor.py) -----
+
+export interface OtpFailedEvent {
+  timestamp: string | null;
+  tracker_no: string | null;
+  reason: string;
+  message: string;
+}
+
+export interface OtpFailedEventsReport {
+  count: number;
+  reason_counts: Record<string, number>;
+  items: OtpFailedEvent[];
+}
+
+export interface OtpProcessorSummary {
+  status: 'ok' | 'no_data';
+  message?: string;
+  window_start?: string;
+  window_end?: string;
+  total_events_analyzed?: number;
+  total_records?: number;
+  event_type_counts?: Record<string, number>;
+  by_org?: Record<string, number>;
+  by_queue?: Record<string, number>;
+  by_currency?: Record<string, number>;
+  top_merchants?: Record<string, number>;
+  otp_processed_count?: number;
+  otp_success_rate_pct?: number | null;
+  force_verify_count?: number;
+  failed_events?: OtpFailedEventsReport;
 }

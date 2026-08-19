@@ -27,12 +27,12 @@ export const StatsView: React.FC = () => {
     .map(([name, value]) => ({ name, value: value as number }));
 
   const severityColors: Record<string, string> = {
-    CRITICAL: '#dc2626',
-    ERROR: '#ef4444',
-    WARN: '#f59e0b',
-    INFO: '#2563eb',
-    DEBUG: '#64748b',
-    UNKNOWN: '#94a3b8',
+    CRITICAL: '#CC1F1F',
+    ERROR: '#FF2F2F',
+    WARN: '#FF8800',
+    INFO: '#052460',
+    DEBUG: '#8892A1',
+    UNKNOWN: '#B2BBC2',
   };
 
   const sourceBarData = Object.entries(stats.source_distribution)
@@ -101,7 +101,7 @@ export const StatsView: React.FC = () => {
                   label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
                 >
                   {severityPieData.map((entry) => (
-                    <Cell key={entry.name} fill={severityColors[entry.name] || '#64748b'} />
+                    <Cell key={entry.name} fill={severityColors[entry.name] || '#8892A1'} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -119,11 +119,11 @@ export const StatsView: React.FC = () => {
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sourceBarData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="source" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }} />
-                <Bar dataKey="count" fill="#2563eb" radius={[6, 6, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#E7E7E7" />
+                <XAxis dataKey="source" stroke="#8892A1" fontSize={11} />
+                <YAxis stroke="#8892A1" fontSize={11} />
+                <Tooltip contentStyle={{ backgroundColor: '#15171A', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }} />
+                <Bar dataKey="count" fill="#052460" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

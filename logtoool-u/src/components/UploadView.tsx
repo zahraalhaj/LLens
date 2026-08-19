@@ -208,7 +208,7 @@ export const UploadView: React.FC<UploadViewProps> = ({ profiles, onIngestSucces
                 Supported formats: <span className="font-mono font-medium text-slate-700">.log, .txt, .json, .jsonl, .csv, .tsv</span>
               </p>
 
-              <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all cursor-pointer">
+              <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all cursor-pointer">
                 <FolderOpen className="w-4 h-4" />
                 <span>Select Log File(s)</span>
                 <input
@@ -390,7 +390,7 @@ export const UploadView: React.FC<UploadViewProps> = ({ profiles, onIngestSucces
             <button
               onClick={handleIngestDirectory}
               disabled={isIngestingDirectory || !directoryPath.trim()}
-              className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
             >
               {isIngestingDirectory ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderInput className="w-4 h-4" />}
               <span>{isIngestingDirectory ? 'Scanning & ingesting…' : 'Ingest directory'}</span>

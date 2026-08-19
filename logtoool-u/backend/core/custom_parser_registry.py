@@ -27,6 +27,9 @@ from backend.custom_parsers import (
     parser_AFS_Netcetera,
     parser_ASBB_Debit,
     parser_ASBB_MW_Credit,
+    parser_Debit_Error,
+    parser_Debit_Transaction,
+    parser_OTP_Processor,
 )
 from backend.core.schema import (
     CanonicalLogEvent,
@@ -46,6 +49,9 @@ _MODULES: Dict[str, Any] = {
     "abce_debit": parser_ABCE_Debit,
     "asbb_debit": parser_ASBB_Debit,
     "afs_netcetera": parser_AFS_Netcetera,
+    "otp_processor": parser_OTP_Processor,
+    "debit_error_log": parser_Debit_Error,
+    "debit_transaction_log": parser_Debit_Transaction,
 }
 
 

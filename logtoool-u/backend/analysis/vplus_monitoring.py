@@ -24,8 +24,9 @@ VPLUS_COMPONENTS = {"vplus_input", "vplus_response", "netcetera_response"}
 # dependency on the custom_parsers package, just a shared convention.
 DEFAULT_SOURCE_SYSTEM = "afs_netcetera_3ds_stepup"
 
-DEFAULT_GAP_THRESHOLD_MINUTES = 10
-DEFAULT_EXPECTED_RESPONSE_MS = 5000
+DEFAULT_GAP_THRESHOLD_MINUTES = 10  # clustering distance: how close together consecutive unresponded inputs must be to report them as one downtime window, rather than raw log-silence detection
+DEFAULT_EXPECTED_RESPONSE_MS = 1000  # a real V+ response should arrive near-instantly
+DEFAULT_UNRESPONDED_GRACE_MS = 5000  # wait at least this long past an input's timestamp before concluding it never got a response at all -- protects against flagging a request that's just still in flight (matters most for the live 5-minute polling job)
 DEFAULT_EXPECTED_SMS_QUEUE_MS = 30000
 
 _MAX_DETAIL_ROWS = 50  # cap on per-item detail lists returned in a report
@@ -63,77 +64,166 @@ def group_events_by_transaction(events: List[Dict[str, Any]]) -> Dict[str, List[
 
 # -- 1. V+ availability monitoring -------------------------------------------
 
+def _close_downtime_window(cluster: List[Dict[str, Any]], recovered_at: Optional[str]) -> Dict[str, Any]:
+    down_since_ts = cluster[0]["input_ts"]
+    recovered_ts = _parse_ts(recovered_at) if recovered_at else None
+    return {
+        "down_since": cluster[0]["input_time"],
+        "recovered_at": recovered_at,
+        "duration_minutes": round((recovered_ts - down_since_ts).total_seconds() / 60, 1) if recovered_ts else None,
+        "unresponded_count": len(cluster),
+        "sample_tracker_no": cluster[0]["tracker_no"],
+    }
+
+
 def compute_vplus_availability(
     events: List[Dict[str, Any]],
     gap_threshold_minutes: int = DEFAULT_GAP_THRESHOLD_MINUTES,
+    expected_response_ms: int = DEFAULT_EXPECTED_RESPONSE_MS,
+    unresponded_grace_ms: int = DEFAULT_UNRESPONDED_GRACE_MS,
     reference_now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Detects gaps in V+/StepUp/Netcetera activity longer than the
-    threshold -- each gap is reported as a downtime window with exactly
-    when it started (last event seen before the gap) and when service
-    returned to normal (first event seen after it). Also reports whether
-    V+ appears down *right now* (no activity since before the threshold,
-    relative to `reference_now`)."""
-    vplus_events = [e for e in events if e.get("component") in VPLUS_COMPONENTS and e.get("ts_utc")]
-    vplus_events.sort(key=lambda e: e["ts_utc"])
+    """Downtime is defined at the request level, not by log silence: every
+    vplus_input is expected to receive a matching vplus_response almost
+    immediately (within `expected_response_ms`, ~1s). An input that never
+    receives ANY response is a concrete failed request -- that's what counts
+    as downtime, replacing the old "no V+ log lines for N minutes" gap
+    detection, which couldn't tell a genuinely quiet period from a real
+    outage (and, worse, compared the log's last timestamp against the
+    server's real wall clock -- meaningless for a historical batch upload
+    whose data doesn't extend up to the present).
 
+    Two distinct signals are reported, deliberately kept separate:
+      - `status == "no_data"`: there is NO V+/StepUp activity of any kind
+        (input, response, or netcetera_response) in the window -- nothing
+        is being logged at all. Independent of whether any request
+        succeeded or failed.
+      - `status == "down"`: there IS V+ activity, but at least one
+        vplus_input never got a vplus_response, and that failure is still
+        unresolved (no later input in the same cluster has since
+        succeeded).
+    """
+    vplus_events = [e for e in events if e.get("component") in VPLUS_COMPONENTS and e.get("ts_utc")]
     if not vplus_events:
         return {
             "status": "no_data",
             "message": "No V+/StepUp activity found in the analyzed window -- cannot determine availability.",
+            "expected_response_ms": expected_response_ms,
             "downtime_windows": [],
             "currently_down": None,
-            "gap_threshold_minutes": gap_threshold_minutes,
         }
 
-    threshold_seconds = gap_threshold_minutes * 60
-    downtime_windows = []
+    reference_now = reference_now or datetime.now(timezone.utc)
+    tx_groups = group_events_by_transaction(vplus_events)
 
-    for i in range(1, len(vplus_events)):
-        prev_ts = _parse_ts(vplus_events[i - 1]["ts_utc"])
-        curr_ts = _parse_ts(vplus_events[i]["ts_utc"])
-        if not prev_ts or not curr_ts:
-            continue
-        gap_seconds = (curr_ts - prev_ts).total_seconds()
-        if gap_seconds > threshold_seconds:
-            downtime_windows.append(
+    resolved: List[Dict[str, Any]] = []
+    for corr_id, tx_events in tx_groups.items():
+        inputs = sorted((e for e in tx_events if e["component"] == "vplus_input"), key=lambda e: e["ts_utc"])
+        responses = sorted((e for e in tx_events if e["component"] == "vplus_response"), key=lambda e: e["ts_utc"])
+
+        for inp in inputs:
+            input_ts = _parse_ts(inp["ts_utc"])
+            if input_ts is None:
+                continue
+            tracker_no = ((inp.get("attributes") or {}).get("details") or {}).get("tracker_no")
+            response_event = next(
+                (r for r in responses if _parse_ts(r["ts_utc"]) and _parse_ts(r["ts_utc"]) >= input_ts), None
+            )
+
+            if response_event is not None:
+                delta_ms = _ms_between(input_ts, _parse_ts(response_event["ts_utc"]))
+                resolved.append(
+                    {
+                        "status": "responded", "correlation_id": corr_id, "tracker_no": tracker_no,
+                        "input_ts": input_ts, "input_time": inp["ts_utc"],
+                        "response_time_ms": delta_ms, "is_delayed": delta_ms is not None and delta_ms > expected_response_ms,
+                    }
+                )
+                continue
+
+            # No response anywhere in this transaction. Only treat as a
+            # confirmed failure once unresponded_grace_ms has elapsed --
+            # otherwise a request from moments ago (or one with an
+            # apparently-future timestamp due to clock skew, where age_ms
+            # comes back None) could just still be in flight.
+            age_ms = _ms_between(input_ts, reference_now)
+            status = "unresponded" if (age_ms is not None and age_ms >= unresponded_grace_ms) else "pending"
+            resolved.append(
                 {
-                    "down_since": vplus_events[i - 1]["ts_utc"],
-                    "recovered_at": vplus_events[i]["ts_utc"],
-                    "duration_minutes": round(gap_seconds / 60, 1),
-                    "last_event_before_down": {
-                        "component": vplus_events[i - 1]["component"],
-                        "correlation_id": (vplus_events[i - 1].get("attributes") or {}).get("correlation_id"),
-                    },
-                    "first_event_after_recovery": {
-                        "component": vplus_events[i]["component"],
-                        "correlation_id": (vplus_events[i].get("attributes") or {}).get("correlation_id"),
-                    },
+                    "status": status, "correlation_id": corr_id, "tracker_no": tracker_no,
+                    "input_ts": input_ts, "input_time": inp["ts_utc"],
+                    "response_time_ms": None, "is_delayed": False,
                 }
             )
 
-    reference_now = reference_now or datetime.now(timezone.utc)
-    last_event_ts = _parse_ts(vplus_events[-1]["ts_utc"])
-    minutes_since_last = (reference_now - last_event_ts).total_seconds() / 60 if last_event_ts else None
-    # Clamp negative values (the "last" event's timestamp is after our
-    # reference clock) to 0 rather than showing a confusing negative
-    # "ago" figure -- this happens with real clock skew between a log
-    # source and the server, not just malformed data, so it's worth
-    # handling gracefully rather than treating as an error.
-    if minutes_since_last is not None and minutes_since_last < 0:
-        minutes_since_last = 0.0
-    currently_down = minutes_since_last is not None and minutes_since_last > gap_threshold_minutes
+    if not resolved:
+        # V+ activity exists (e.g. a lone netcetera_response) but there's no
+        # vplus_input at all -- nothing to pair, so there's no failed
+        # request to report. Distinct from "no_data": there IS activity.
+        return {
+            "status": "healthy",
+            "expected_response_ms": expected_response_ms,
+            "gap_threshold_minutes": gap_threshold_minutes,
+            "total_inputs_analyzed": 0,
+            "responded_count": 0,
+            "unresponded_count": 0,
+            "unresponded_pct": 0.0,
+            "delayed_count": 0,
+            "delayed_pct": 0.0,
+            "downtime_windows": [],
+            "total_downtime_minutes": 0.0,
+            "currently_down": False,
+            "worst_unresponded": [],
+        }
+
+    resolved.sort(key=lambda x: x["input_ts"])
+    responded = [r for r in resolved if r["status"] == "responded"]
+    unresponded = [r for r in resolved if r["status"] == "unresponded"]
+    delayed = [r for r in responded if r["is_delayed"]]
+
+    # Cluster consecutive unresponded inputs (gap under gap_threshold_minutes)
+    # into reportable downtime windows -- same "windows" shape the UI already
+    # renders, now driven by real request failures instead of raw silence.
+    downtime_windows = []
+    cluster: List[Dict[str, Any]] = []
+    threshold_seconds = gap_threshold_minutes * 60
+
+    for item in resolved:
+        if item["status"] != "unresponded":
+            if cluster:
+                downtime_windows.append(_close_downtime_window(cluster, recovered_at=item["input_time"]))
+                cluster = []
+            continue
+        if cluster and (item["input_ts"] - cluster[-1]["input_ts"]).total_seconds() > threshold_seconds:
+            downtime_windows.append(_close_downtime_window(cluster, recovered_at=None))
+            cluster = []
+        cluster.append(item)
+    if cluster:
+        downtime_windows.append(_close_downtime_window(cluster, recovered_at=None))
+
+    currently_down = bool(downtime_windows) and downtime_windows[-1]["recovered_at"] is None
 
     return {
         "status": "down" if currently_down else "healthy",
+        "expected_response_ms": expected_response_ms,
         "gap_threshold_minutes": gap_threshold_minutes,
-        "total_events_analyzed": len(vplus_events),
-        "window_start": vplus_events[0]["ts_utc"],
-        "window_end": vplus_events[-1]["ts_utc"],
+        "window_start": resolved[0]["input_time"],
+        "window_end": resolved[-1]["input_time"],
+        "total_inputs_analyzed": len(resolved),
+        "responded_count": len(responded),
+        "unresponded_count": len(unresponded),
+        "unresponded_pct": round(100 * len(unresponded) / len(resolved), 1),
+        "delayed_count": len(delayed),
+        "delayed_pct": round(100 * len(delayed) / len(responded), 1) if responded else 0.0,
         "downtime_windows": downtime_windows,
-        "total_downtime_minutes": round(sum(w["duration_minutes"] for w in downtime_windows), 1),
+        "total_downtime_minutes": round(
+            sum(w["duration_minutes"] for w in downtime_windows if w["duration_minutes"] is not None), 1
+        ),
         "currently_down": currently_down,
-        "minutes_since_last_event": round(minutes_since_last, 1) if minutes_since_last is not None else None,
+        "worst_unresponded": [
+            {"correlation_id": u["correlation_id"], "tracker_no": u["tracker_no"], "input_time": u["input_time"]}
+            for u in unresponded
+        ][:_MAX_DETAIL_ROWS],
     }
 
 
@@ -291,7 +381,53 @@ def compute_sms_analysis(
     }
 
 
-# -- 6. Comprehensive investigation-focused correlation -----------------------
+# -- 6. Netcetera transaction breakdown (issuer / status) --------------------
+
+def compute_transaction_breakdown(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Issuer and status distribution across every resolved transaction in
+    the window -- mirrors parser_AFS_Netcetera.py's own (unused-by-LLens)
+    build_summary() bucketing exactly: status is the StepUp response status
+    when one was seen, falling back to "OTP_PROCESSED" for transactions
+    that completed via the initiate-action/OTP path without an explicit
+    StepUp status, else "UNKNOWN". Unlike compute_investigation_summary's
+    most_affected_merchants/issuers (which only count ERROR-associated
+    transactions), this covers ALL transactions -- success, failure, and
+    everything in between."""
+    tx_groups = group_events_by_transaction(events)
+
+    issuer_counts: Counter = Counter()
+    status_counts: Counter = Counter()
+    total_transactions = 0
+
+    for corr_id, tx_events in tx_groups.items():
+        tx = next(
+            (((e.get("attributes") or {}).get("details") or {}).get("transaction") for e in tx_events
+             if ((e.get("attributes") or {}).get("details") or {}).get("transaction")),
+            None,
+        )
+        if not tx:
+            continue
+        total_transactions += 1
+
+        issuer_counts[tx.get("issuer_id") or "UNKNOWN"] += 1
+
+        status = tx.get("stepup_status")
+        if not status and tx.get("otp_processed"):
+            status = "OTP_PROCESSED"
+        status_counts[status or "UNKNOWN"] += 1
+
+    if total_transactions == 0:
+        return {"status": "no_data", "message": "No resolved transactions found in the analyzed window."}
+
+    return {
+        "status": "ok",
+        "total_transactions": total_transactions,
+        "issuer_counts": dict(issuer_counts.most_common()),
+        "status_counts": dict(status_counts.most_common()),
+    }
+
+
+# -- 7. Comprehensive investigation-focused correlation -----------------------
 
 def compute_investigation_summary(
     events: List[Dict[str, Any]],
@@ -322,23 +458,23 @@ def compute_investigation_summary(
 
     findings: List[Dict[str, str]] = []
 
-    if vplus_report.get("currently_down"):
-        findings.append(
-            {
-                "severity": "critical",
-                "finding": f"V+ appears DOWN right now -- no activity for "
-                f"{vplus_report.get('minutes_since_last_event')} minutes.",
-            }
-        )
-
     for window in vplus_report.get("downtime_windows", [])[:5]:
-        findings.append(
-            {
-                "severity": "high",
-                "finding": f"V+ outage: down from {window['down_since']} to {window['recovered_at']} "
-                f"({window['duration_minutes']} min).",
-            }
-        )
+        if window.get("recovered_at"):
+            findings.append(
+                {
+                    "severity": "high",
+                    "finding": f"V+ outage: {window['unresponded_count']} request(s) got no vplus_response, "
+                    f"from {window['down_since']} to {window['recovered_at']} ({window['duration_minutes']} min).",
+                }
+            )
+        else:
+            findings.append(
+                {
+                    "severity": "critical",
+                    "finding": f"V+ appears DOWN right now -- {window['unresponded_count']} request(s) have "
+                    f"gotten no vplus_response since {window['down_since']}.",
+                }
+            )
 
     if response_time_report.get("status") == "ok" and response_time_report.get("delayed_pct", 0) >= 10:
         findings.append(

@@ -150,7 +150,7 @@ export const ControlCenterView: React.FC = () => {
         </div>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Add machine
@@ -271,7 +271,7 @@ export const ControlCenterView: React.FC = () => {
           <div className="flex items-center gap-2">
             <button
               type="submit" disabled={creating}
-              className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer"
+              className="px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer"
             >
               {creating ? 'Adding…' : 'Add machine'}
             </button>

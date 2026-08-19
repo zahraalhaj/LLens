@@ -51,11 +51,11 @@ export const TimelineView: React.FC = () => {
     }));
 
   const levelColors: Record<string, string> = {
-    CRITICAL: '#dc2626',
-    ERROR: '#ef4444',
-    WARN: '#f59e0b',
-    INFO: '#2563eb',
-    DEBUG: '#64748b'
+    CRITICAL: '#CC1F1F',
+    ERROR: '#FF2F2F',
+    WARN: '#FF8800',
+    INFO: '#052460',
+    DEBUG: '#8892A1'
   };
 
   const toggleLevel = (lvl: string) => {
@@ -133,11 +133,11 @@ export const TimelineView: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               {chartType === 'bar' ? (
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-                  <YAxis stroke="#64748b" fontSize={11} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E7E7E7" />
+                  <XAxis dataKey="time" stroke="#8892A1" fontSize={11} />
+                  <YAxis stroke="#8892A1" fontSize={11} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }}
+                    contentStyle={{ backgroundColor: '#15171A', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }}
                   />
                   <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
                   {selectedLevels.CRITICAL && <Bar dataKey="CRITICAL" stackId="a" fill={levelColors.CRITICAL} />}
@@ -148,11 +148,11 @@ export const TimelineView: React.FC = () => {
                 </BarChart>
               ) : (
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-                  <YAxis stroke="#64748b" fontSize={11} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E7E7E7" />
+                  <XAxis dataKey="time" stroke="#8892A1" fontSize={11} />
+                  <YAxis stroke="#8892A1" fontSize={11} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }}
+                    contentStyle={{ backgroundColor: '#15171A', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' }}
                   />
                   <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
                   {selectedLevels.CRITICAL && <Area type="monotone" dataKey="CRITICAL" stackId="1" stroke={levelColors.CRITICAL} fill={levelColors.CRITICAL} />}

@@ -77,12 +77,18 @@ class VPlusAvailabilityMonitor:
 
         if now_down and not was_down:
             down_since = report.get("window_end") or now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if report["status"] == "no_data":
+                detail = report.get("message", "No V+/StepUp activity detected at all.")
+            else:
+                detail = (
+                    f"{report.get('unresponded_count', 0)} vplus_input request(s) received no vplus_response "
+                    f"(expected within {report.get('expected_response_ms')}ms)."
+                )
             self._send_alert(
                 subject="[V+ ALERT] V+ / StepUp service appears DOWN",
                 body=(
-                    f"No V+/StepUp activity detected since {down_since}.\n\n"
-                    f"{report.get('message', '')}\n"
-                    f"Gap threshold: {self.gap_threshold_minutes} minutes.\n"
+                    f"V+/StepUp availability check failed as of {down_since}.\n\n"
+                    f"{detail}\n"
                 ),
             )
             self._set_state(is_down=True, down_since=down_since, checked_at=now)

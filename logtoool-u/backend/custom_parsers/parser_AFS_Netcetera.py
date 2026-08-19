@@ -565,6 +565,8 @@ def parse_log_file(log_file_path, output_json_path=None):
                 "transaction_info": tx_context["transaction"],
                 "customer": tx_context["customer"],
                 "derived": tx_context["derived"],
+                "stepup_status": tx_context["stepup"]["status"],
+                "otp_processed": tx_context["initiate_action"]["otp_processed"],
             }
 
         records.append(

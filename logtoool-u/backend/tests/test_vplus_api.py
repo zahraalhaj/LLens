@@ -3,6 +3,7 @@ API-level tests for /api/vplus/* -- self-contained fixture pattern, same
 approach as test_machines_api.py / test_alerts_api.py.
 """
 import io
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -49,11 +50,18 @@ def admin_client(client):
     return client
 
 
+# Timestamps are relative to real "now" rather than hardcoded -- the
+# availability/transactions endpoints default to a 24h lookback window
+# compared against datetime.now(), so a fixed calendar date drifts out of
+# range and starts failing purely from wall-clock time passing.
+_T0 = datetime.now(timezone.utc) - timedelta(hours=1)
+_T1 = _T0 + timedelta(seconds=3)
+
 SAMPLE_LOG = (
-    '8/18/2026 10:00:00 AM Log Tracker No: SU12345 => Stepup Responce to Netcetra: '
+    f'{_T0.strftime("%-m/%-d/%Y %I:%M:%S %p")} Log Tracker No: SU12345 => Stepup Responce to Netcetra: '
     '{"TransactionId": "TXN001", "IssuerId": "ISS01", "Status": "SUCCESS", '
     '"MerchantInfo": {"MerchantName": "Acme Store"}}\n'
-    '8/18/2026 10:00:03 AM Log Tracker No: SU12345 => StepupCall V+ Input Message details here\n'
+    f'{_T1.strftime("%-m/%-d/%Y %I:%M:%S %p")} Log Tracker No: SU12345 => StepupCall V+ Input Message details here\n'
 )
 
 
@@ -75,7 +83,7 @@ def test_availability_endpoint_after_ingestion(admin_client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] in ("healthy", "down")  # real computed status, not a stub
-    assert body["total_events_analyzed"] >= 1
+    assert body["total_inputs_analyzed"] >= 1
 
 
 def test_response_times_endpoint_query_params(admin_client):
@@ -106,3 +114,31 @@ def test_investigation_summary_endpoint_combines_all_reports(admin_client):
 def test_invalid_lookback_hours_rejected(admin_client):
     resp = admin_client.get("/api/vplus/availability?lookback_hours=0")
     assert resp.status_code == 422  # below the ge=1 constraint
+
+
+def test_transactions_endpoint_with_no_data(admin_client):
+    resp = admin_client.get("/api/vplus/transactions")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "no_data"
+
+
+def test_transactions_endpoint_after_ingestion(admin_client):
+    files = {"file": ("afs.log", io.BytesIO(SAMPLE_LOG.encode()), "application/octet-stream")}
+    admin_client.post("/api/logs/upload", files=files)
+
+    resp = admin_client.get("/api/vplus/transactions")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["total_transactions"] == 1
+    assert body["issuer_counts"] == {"ISS01": 1}
+    assert body["status_counts"] == {"SUCCESS": 1}
+
+
+def test_investigation_summary_includes_transaction_breakdown(admin_client):
+    files = {"file": ("afs.log", io.BytesIO(SAMPLE_LOG.encode()), "application/octet-stream")}
+    admin_client.post("/api/logs/upload", files=files)
+
+    resp = admin_client.get("/api/vplus/investigation-summary")
+    assert resp.status_code == 200
+    assert "transaction_breakdown" in resp.json()

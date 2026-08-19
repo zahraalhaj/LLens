@@ -1,1 +1,115 @@
 @import "tailwindcss";
+
+/*
+ * Enterprise brand palette override.
+ *
+ * The app was built entirely on Tailwind's default color scales
+ * (blue/slate/emerald/rose/amber/orange/red) referenced directly in every
+ * component's className. Rather than rewriting every className, this
+ * overrides Tailwind v4's own scale variables so every existing utility
+ * class (bg-blue-600, text-slate-500, border-rose-200, ...) picks up the
+ * brand color automatically. Anchors match the brand system's named colors
+ * exactly at the slot matching their described role; the remaining steps
+ * are interpolated tints/shades to keep each scale visually coherent.
+ *
+ * Brand anchors placed:
+ *   blue-400  Sky Blue        #00AEEF   (primary button pressed / bright accent)
+ *   blue-500  Cerulean Blue   #036FD0   (primary button hover, focus rings, links pressed)
+ *   blue-600  Royal Blue      #052460   (primary button default, active tab, links)
+ *   slate-50  Mist            #F9F9F9   (surfaces)
+ *   slate-100 Fog             #E7E7E7   (light surfaces / borders)
+ *   slate-400 Thunderstorm sh #B2BBC2
+ *   slate-500 Thunderstorm    #8892A1   (muted/secondary text)
+ *   slate-700 Charcoal        #2A2F34   (body text)
+ *   slate-900 Midnight        #15171A   (dark surfaces, e.g. sidebar)
+ *   emerald-500 Moss          #54C029   (success)
+ *   rose-500/red-500 Cherry   #FF2F2F   (alert/danger)
+ *   amber-500 Posey           #FF8800   (caution/warning)
+ *   orange-400 Sunflower      #F8E71C   (notice -- kept in its own scale so
+ *             "high" severity stays visually distinct from "medium"/amber)
+ */
+@theme {
+  --color-blue-50: #eaf6fe;
+  --color-blue-100: #d1eefd;
+  --color-blue-200: #9edbfb;
+  --color-blue-300: #66c6f4;
+  --color-blue-400: #00aeef;
+  --color-blue-500: #036fd0;
+  --color-blue-600: #052460;
+  --color-blue-700: #041d4d;
+  --color-blue-800: #03153a;
+  --color-blue-900: #020d26;
+  --color-blue-950: #010613;
+
+  --color-slate-50: #f9f9f9;
+  --color-slate-100: #e7e7e7;
+  --color-slate-200: #d8dadd;
+  --color-slate-300: #c2c6cb;
+  --color-slate-400: #b2bbc2;
+  --color-slate-500: #8892a1;
+  --color-slate-600: #6c7683;
+  --color-slate-700: #2a2f34;
+  --color-slate-800: #1e2226;
+  --color-slate-900: #15171a;
+  --color-slate-950: #0a0b0d;
+
+  --color-emerald-50: #effbe8;
+  --color-emerald-100: #dcf5cc;
+  --color-emerald-200: #b9ea9c;
+  --color-emerald-300: #94de6c;
+  --color-emerald-400: #74d047;
+  --color-emerald-500: #54c029;
+  --color-emerald-600: #45a21f;
+  --color-emerald-700: #368017;
+  --color-emerald-800: #275e10;
+  --color-emerald-900: #1a3f0a;
+  --color-emerald-950: #0d2005;
+
+  --color-rose-50: #ffeeee;
+  --color-rose-100: #ffdada;
+  --color-rose-200: #ffb3b3;
+  --color-rose-300: #ff8686;
+  --color-rose-400: #ff5959;
+  --color-rose-500: #ff2f2f;
+  --color-rose-600: #e51f1f;
+  --color-rose-700: #c71818;
+  --color-rose-800: #a11212;
+  --color-rose-900: #7a0d0d;
+  --color-rose-950: #440707;
+
+  --color-red-50: #ffeeee;
+  --color-red-100: #ffdada;
+  --color-red-200: #ffb3b3;
+  --color-red-300: #ff8686;
+  --color-red-400: #ff5959;
+  --color-red-500: #ff2f2f;
+  --color-red-600: #e51f1f;
+  --color-red-700: #c71818;
+  --color-red-800: #a11212;
+  --color-red-900: #7a0d0d;
+  --color-red-950: #440707;
+
+  --color-amber-50: #fff3e5;
+  --color-amber-100: #ffe3c2;
+  --color-amber-200: #ffc98f;
+  --color-amber-300: #ffad5c;
+  --color-amber-400: #ff9933;
+  --color-amber-500: #ff8800;
+  --color-amber-600: #e67a00;
+  --color-amber-700: #c66800;
+  --color-amber-800: #995000;
+  --color-amber-900: #663600;
+  --color-amber-950: #331b00;
+
+  --color-orange-50: #fff9e0;
+  --color-orange-100: #fff0b8;
+  --color-orange-200: #fde580;
+  --color-orange-300: #fbd84d;
+  --color-orange-400: #f8e71c;
+  --color-orange-500: #e8ce00;
+  --color-orange-600: #c9af00;
+  --color-orange-700: #a38f00;
+  --color-orange-800: #7a6b00;
+  --color-orange-900: #4d4300;
+  --color-orange-950: #292300;
+}

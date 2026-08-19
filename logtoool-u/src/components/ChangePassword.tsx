@@ -114,7 +114,7 @@ export const ChangePassword: React.FC = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white rounded-md transition-all cursor-pointer disabled:cursor-not-allowed"
             >
               {submitting ? 'Setting password…' : 'Set new password & continue'}
             </button>

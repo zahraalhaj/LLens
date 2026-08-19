@@ -192,7 +192,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ ollamaAvailable }) => {
         <button
           onClick={() => handleSendQuery()}
           disabled={isQuerying || !inputQuery.trim()}
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
         >
           <Send className="w-3.5 h-3.5" />
           <span>Ask</span>

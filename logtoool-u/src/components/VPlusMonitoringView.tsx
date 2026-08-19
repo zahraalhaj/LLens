@@ -1,10 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import {
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
+} from 'recharts';
+import {
   Activity, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock,
-  MessageSquareText, Search, ShieldAlert, Info, TrendingDown,
+  MessageSquareText, Search, ShieldAlert, Info, TrendingDown, Copy, Check, Building2, Layers,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { VPlusFullReport } from '../types';
+
+const PALETTE = ['#052460', '#54C029', '#FF8800', '#CC1F1F', '#3C4B72', '#2398C9', '#04ADA4', '#2A2F34', '#FF8800', '#8892A1'];
+
+const STATUS_COLORS: Record<string, string> = {
+  SUCCESS: '#54C029',
+  OTP_PROCESSED: '#052460',
+  FAILURE: '#CC1F1F',
+  FAILWITHFEEDBACK: '#FF8800',
+  UNKNOWN: '#8892A1',
+};
+
+const tooltipStyle = { backgroundColor: '#15171A', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' };
+
+const toChartData = (record: Record<string, number> | undefined) =>
+  Object.entries(record || {}).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
 
 const SEVERITY_STYLES: Record<string, string> = {
   critical: 'bg-rose-50 text-rose-800 border-rose-300',
@@ -28,6 +46,17 @@ export const VPlusMonitoringView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lookbackHours, setLookbackHours] = useState(24);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(key);
+      setTimeout(() => setCopiedId((cur) => (cur === key ? null : cur)), 1500);
+    } catch {
+      // clipboard API unavailable/denied -- nothing to recover from, leave silently uncopied
+    }
+  };
 
   const fetchReport = async (hours: number) => {
     setLoading(true);
@@ -70,7 +99,9 @@ export const VPlusMonitoringView: React.FC = () => {
     );
   }
 
-  const { availability: avail, response_times: rt, sms_analysis: sms, investigation_summary: inv } = report;
+  const { availability: avail, response_times: rt, sms_analysis: sms, investigation_summary: inv, transaction_breakdown: txBreakdown } = report;
+  const statusCountsData = toChartData(txBreakdown?.status_counts);
+  const issuerCountsData = toChartData(txBreakdown?.issuer_counts);
 
   const statusColor =
     avail.status === 'healthy' ? 'text-emerald-600' : avail.status === 'down' ? 'text-rose-600' : 'text-slate-400';
@@ -104,7 +135,7 @@ export const VPlusMonitoringView: React.FC = () => {
           <button
             onClick={() => fetchReport(lookbackHours)}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -129,8 +160,8 @@ export const VPlusMonitoringView: React.FC = () => {
               {avail.status === 'no_data'
                 ? avail.message
                 : avail.status === 'down'
-                ? `No V+ activity for ${avail.minutes_since_last_event} minutes (threshold: ${avail.gap_threshold_minutes}m)`
-                : `Last activity ${avail.minutes_since_last_event}m ago · ${avail.total_events_analyzed} events analyzed in this window`}
+                ? `${avail.unresponded_count} of ${avail.total_inputs_analyzed} request(s) got no vplus_response (expected within ${avail.expected_response_ms}ms)`
+                : `${avail.responded_count}/${avail.total_inputs_analyzed} requests responded · expected response ≤ ${avail.expected_response_ms}ms`}
             </div>
           </div>
         </div>
@@ -199,14 +230,18 @@ export const VPlusMonitoringView: React.FC = () => {
                   <th className="px-4 py-2">Down Since</th>
                   <th className="px-4 py-2">Recovered At</th>
                   <th className="px-4 py-2">Duration</th>
+                  <th className="px-4 py-2">Unresponded</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {avail.downtime_windows.map((w, i) => (
                   <tr key={i}>
                     <td className="px-4 py-2 font-mono text-slate-700">{fmtTime(w.down_since)}</td>
-                    <td className="px-4 py-2 font-mono text-slate-700">{fmtTime(w.recovered_at)}</td>
-                    <td className="px-4 py-2 font-bold text-rose-600">{w.duration_minutes}m</td>
+                    <td className="px-4 py-2 font-mono text-slate-700">
+                      {w.recovered_at ? fmtTime(w.recovered_at) : <span className="text-rose-600 font-bold">Ongoing</span>}
+                    </td>
+                    <td className="px-4 py-2 font-bold text-rose-600">{w.duration_minutes != null ? `${w.duration_minutes}m` : '—'}</td>
+                    <td className="px-4 py-2 font-bold text-slate-700">{w.unresponded_count}</td>
                   </tr>
                 ))}
               </tbody>
@@ -235,7 +270,18 @@ export const VPlusMonitoringView: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {rt.worst_delays.map((p, i) => (
                   <tr key={i}>
-                    <td className="px-4 py-2 font-mono text-slate-700 truncate max-w-[140px]">{p.correlation_id}</td>
+                    <td className="px-4 py-2 font-mono text-slate-700">
+                      <div className="flex items-center gap-1.5 max-w-[160px]">
+                        <span className="truncate">{p.correlation_id}</span>
+                        <button
+                          onClick={() => handleCopy(p.correlation_id, `wd-${i}`)}
+                          title="Copy transaction ID"
+                          className="shrink-0 p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                        >
+                          {copiedId === `wd-${i}` ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-4 py-2 font-mono text-slate-500">{fmtTime(p.input_time)}</td>
                     <td className="px-4 py-2 font-bold text-rose-600">{fmtMs(p.response_time_ms)}</td>
                   </tr>
@@ -298,6 +344,66 @@ export const VPlusMonitoringView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {txBreakdown?.status === 'ok' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
+            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-blue-600" />
+              Netcetera Transactions by Status ({txBreakdown.total_transactions})
+            </h3>
+            {statusCountsData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-xs text-slate-400 italic">No status data in this window.</div>
+            ) : (
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusCountsData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={3}
+                      label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
+                    >
+                      {statusCountsData.map((entry, i) => (
+                        <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || PALETTE[i % PALETTE.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
+            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-emerald-600" />
+              Netcetera Transactions by Issuer
+            </h3>
+            {issuerCountsData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-xs text-slate-400 italic">No issuer data in this window.</div>
+            ) : (
+              <div style={{ height: Math.max(220, issuerCountsData.length * 34) }} className="w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={issuerCountsData} layout="vertical" margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E7E7E7" />
+                    <XAxis type="number" stroke="#8892A1" fontSize={11} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" stroke="#8892A1" fontSize={11} width={120} tick={{ width: 110 }} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="value" name="Transactions" fill="#052460" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {(Object.keys(inv.most_affected_merchants).length > 0 || Object.keys(inv.most_affected_issuers).length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
