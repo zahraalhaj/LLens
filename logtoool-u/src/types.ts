@@ -323,3 +323,78 @@ export interface OtpProcessorSummary {
   force_verify_count?: number;
   failed_events?: OtpFailedEventsReport;
 }
+
+// -- Shared failed-event shape reused across the Debit/Cardinal/VFlex report types --
+
+export interface GenericFailedEvent {
+  timestamp: string | null;
+  correlation_id: string | null;
+  reason: string;
+  message: string;
+}
+
+export interface GenericFailedEventsReport {
+  count: number;
+  reason_counts: Record<string, number>;
+  items: GenericFailedEvent[];
+}
+
+// -- Debit Portal analysis (backend/analysis/debit_portal.py) --------------
+
+export interface DebitPortalSummary {
+  status: 'ok' | 'no_data';
+  message?: string;
+  window_start?: string;
+  window_end?: string;
+  total_events_analyzed?: number;
+  total_records?: number;
+  event_type_counts?: Record<string, number>;
+  by_issuer?: Record<string, number>;
+  by_status?: Record<string, number>;
+  by_currency?: Record<string, number>;
+  top_merchants?: Record<string, number>;
+  otp_processed_count?: number;
+  checks_needed_count?: number;
+  failed_events?: GenericFailedEventsReport;
+}
+
+// -- Cardinal analysis (backend/analysis/cardinal.py) -----------------------
+
+export interface CardinalSummary {
+  status: 'ok' | 'no_data';
+  message?: string;
+  window_start?: string;
+  window_end?: string;
+  total_events_analyzed?: number;
+  total_flows?: number;
+  event_type_counts?: Record<string, number>;
+  by_issuer?: Record<string, number>;
+  by_status?: Record<string, number>;
+  by_bank_org?: Record<string, number>;
+  oob_status_counts?: Record<string, number>;
+  top_merchants?: Record<string, number>;
+  otp_processed_count?: number;
+  checks_needed_count?: number;
+  failed_events?: GenericFailedEventsReport;
+}
+
+// -- VFlex analysis (backend/analysis/vflex.py) ------------------------------
+
+export interface VFlexSummary {
+  status: 'ok' | 'no_data';
+  message?: string;
+  window_start?: string;
+  window_end?: string;
+  total_events_analyzed?: number;
+  total_records?: number;
+  event_type_counts?: Record<string, number>;
+  by_issuer?: Record<string, number>;
+  by_status?: Record<string, number>;
+  by_bank_operation?: Record<string, number>;
+  by_channel?: Record<string, number>;
+  top_merchants?: Record<string, number>;
+  otp_processed_count?: number;
+  bank_api_success_count?: number;
+  checks_needed_count?: number;
+  failed_events?: GenericFailedEventsReport;
+}

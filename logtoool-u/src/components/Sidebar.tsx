@@ -10,13 +10,31 @@ import {
   ActivitySquare,
   Activity,
   KeyRound,
+  CreditCard,
+  ShieldQuestion,
+  Smartphone,
   Users as UsersIcon,
   ServerCog,
   LogOut,
 } from 'lucide-react';
 import { User } from '../types';
 
-export type TabType = 'upload' | 'explore' | 'timeline' | 'stats' | 'profiling' | 'vplus' | 'otp-processor' | 'alerts' | 'chat' | 'settings' | 'users' | 'control-center';
+export type TabType =
+  | 'upload'
+  | 'explore'
+  | 'timeline'
+  | 'stats'
+  | 'profiling'
+  | 'vplus'
+  | 'otp-processor'
+  | 'debit-portal'
+  | 'cardinal'
+  | 'vflex'
+  | 'alerts'
+  | 'chat'
+  | 'settings'
+  | 'users'
+  | 'control-center';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -36,6 +54,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, criti
     { id: 'profiling' as TabType, label: 'Anomaly Insights', icon: ActivitySquare, badge: null },
     { id: 'vplus' as TabType, label: 'V+ Monitoring', icon: Activity, badge: null },
     { id: 'otp-processor' as TabType, label: 'OTP Processor', icon: KeyRound, badge: null },
+    { id: 'debit-portal' as TabType, label: 'Debit Portal', icon: CreditCard, badge: null },
+    { id: 'cardinal' as TabType, label: 'Cardinal', icon: ShieldQuestion, badge: null },
+    { id: 'vflex' as TabType, label: 'VFlex', icon: Smartphone, badge: null },
     { id: 'alerts' as TabType, label: 'Alerts Center', icon: BellRing, badge: criticalCount > 0 ? `${criticalCount} Critical` : null },
     { id: 'chat' as TabType, label: 'Chat With Logs', icon: MessageSquareCode, badge: ollamaAvailable ? 'AI' : null },
     { id: 'settings' as TabType, label: 'Profiles & Settings', icon: Settings, badge: null },
