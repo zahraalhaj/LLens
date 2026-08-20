@@ -225,13 +225,13 @@ def test_profiling_reports_honest_method_label(admin_client):
     assert "not a trained machine learning model" in body["description"]
 
 
-def test_profiles_list_returns_seven_defaults_plus_eight_custom(admin_client):
+def test_profiles_list_returns_seven_defaults_plus_nine_custom(admin_client):
     resp = admin_client.get("/api/profiles")
     assert resp.status_code == 200
     profiles = resp.json()
-    assert len(profiles) == 15
+    assert len(profiles) == 16
     custom = [p for p in profiles if p["type"] == "custom"]
-    assert len(custom) == 8
+    assert len(custom) == 9
 
 
 def test_ai_explain_returns_503_when_ollama_unavailable(admin_client):
