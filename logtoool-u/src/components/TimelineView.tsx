@@ -127,7 +127,7 @@ export const TimelineView: React.FC = () => {
         <div className="h-96 w-full pt-4">
           {chartData.length === 0 ? (
             <div className="h-full flex items-center justify-center text-slate-400 italic text-xs">
-              No log data available for timeline visualization. Upload log files or click "Load Samples".
+              No log data available for timeline visualization. Upload log files to get started.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">

@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { UserPlus, Trash2, ShieldCheck, ShieldOff, KeyRound } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { User } from '../types';
+import { useConfirm } from './ConfirmDialog';
 
 interface UsersViewProps {
   currentUserId: string;
 }
 
 export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
+  const confirm = useConfirm();
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
@@ -55,7 +57,13 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
   };
 
   const handleDelete = async (u: User) => {
-    if (!window.confirm(`Permanently delete user '${u.username}'?`)) return;
+    const confirmed = await confirm({
+      title: 'Delete user?',
+      message: `Permanently delete user '${u.username}'? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await api.delete(`/api/users/${u.user_id}`);
       await loadUsers();
@@ -65,7 +73,12 @@ export const UsersView: React.FC<UsersViewProps> = ({ currentUserId }) => {
   };
 
   const handleForcePasswordReset = async (u: User) => {
-    if (!window.confirm(`Force '${u.username}' to set a new password on their next login?`)) return;
+    const confirmed = await confirm({
+      title: 'Force password reset?',
+      message: `Force '${u.username}' to set a new password on their next login?`,
+      confirmLabel: 'Force reset',
+    });
+    if (!confirmed) return;
     try {
       await api.post(`/api/users/${u.user_id}/force-password-reset`);
       await loadUsers();

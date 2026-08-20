@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Cpu, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { Logo } from './Logo';
 
 export const Login: React.FC = () => {
   const { login, error } = useAuth();
@@ -23,14 +24,9 @@ export const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-3 justify-center mb-8">
-          <div className="bg-blue-600 text-white p-2 rounded-lg font-bold flex items-center justify-center w-10 h-10 shadow-xs">
-            <Cpu className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">LOGTOOL</h1>
-            <p className="text-xs text-slate-500">Log Visualization & Analytics</p>
-          </div>
+        <div className="flex flex-col items-center gap-2 justify-center mb-8">
+          <Logo variant="light" markClassName="w-10 h-8" />
+          <p className="text-xs text-slate-500">Payment Log Visualization & Analytics</p>
         </div>
 
         <form

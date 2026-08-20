@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 /*
@@ -29,6 +30,8 @@
  *             "high" severity stays visually distinct from "medium"/amber)
  */
 @theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+
   --color-blue-50: #eaf6fe;
   --color-blue-100: #d1eefd;
   --color-blue-200: #9edbfb;
@@ -112,4 +115,25 @@
   --color-orange-800: #7a6b00;
   --color-orange-900: #4d4300;
   --color-orange-950: #292300;
+}
+
+/* Slim, low-contrast scrollbars in line with the enterprise chrome --
+   the default OS scrollbar reads as unfinished next to the rest of the UI. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-300) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-slate-300);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-slate-400);
 }
