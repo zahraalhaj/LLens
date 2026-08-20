@@ -725,8 +725,29 @@ def parse_event(event):
             }
 
         elif event_type == "error":
+            # Merged in from the former parser_Debit_Error.py (same source,
+            # just a different log shape: a "Log Tracker No: ID => Error in
+            # X Call : url" line followed by a "System.<Exception>: <detail>"
+            # line and a "   at <frame>" stack-trace line). split_timestamped_
+            # events() already groups all of that into one `raw` block (it
+            # only splits on the NEXT timestamp, not on blank lines), so the
+            # same regexes apply directly -- they just need a trailing "\n"
+            # restored after clean_text()'s strip() for the final capture
+            # group to terminate against.
+            raw_with_trailing_newline = raw + "\n"
+
+            call_match = re.search(r"Error in (.+?) Call : (.+?)\n", raw_with_trailing_newline)
+            stack_match = re.search(
+                r"System\.(.+?)\:\s*(.+?)\n\s+at (.+?)\n", raw_with_trailing_newline, re.DOTALL
+            )
+
             parsed["parsed"] = {
-                "error_message": raw
+                "error_message": raw,
+                "error_call": call_match.group(1) if call_match else None,
+                "error_url": call_match.group(2) if call_match else None,
+                "exception_type": stack_match.group(1) if stack_match else None,
+                "exception_details": stack_match.group(2) if stack_match else None,
+                "stack_trace": stack_match.group(3) if stack_match else None,
             }
 
         else:
@@ -1030,7 +1051,17 @@ def parse_file(input_file):
 # script (only the argparse-based CLI / main()/__main__ block was dropped,
 # consistent with the other custom parsers in this directory; this replaces
 # the earlier positional-field-index implementation of this same profile
-# entirely, per user request).
+# entirely, per user request) EXCEPT for the "error" branch inside
+# parse_event(), which now also extracts structured exception details
+# (error_call/error_url/exception_type/exception_details/stack_trace) --
+# that logic was merged in from the former parser_Debit_Error.py (now
+# removed) at the user's request, since both parsers cover the same source
+# system, just different log shapes (transaction/JSON/XML/queue events vs.
+# stack-trace error blocks). This parser's own timestamp-based splitting
+# already groups a whole multi-line error block into one `raw` event (it
+# only splits on the NEXT timestamp match, not on blank lines), so no
+# separate block-reading logic was needed to merge them -- see the comment
+# at that branch for detail.
 #
 # parse_file() returns (parsed_events, transactions, summary, failed_events)
 # -- events are the flat per-line stream (like parser_AFS_Netcetera.py /
@@ -1046,8 +1077,8 @@ def parse_file(input_file):
 # being dropped -- consistent with every other parser in this directory.
 # ---------------------------------------------------------------------------
 
-DISPLAY_NAME = "Debit Transaction Log (JSON/XML/KV Correlation)"
-DEFAULT_SOURCE_SYSTEM = "debit_transaction_log"
+DISPLAY_NAME = "Debit Portal Log (Transactions + Errors)"
+DEFAULT_SOURCE_SYSTEM = "debit_portal_log"
 
 
 def detect(sample_text: str) -> bool:

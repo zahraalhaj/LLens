@@ -13,7 +13,20 @@ from fastapi.responses import JSONResponse
 
 from backend.api.config import settings
 from backend.api.deps import get_auth_service, get_db, get_email_dispatcher, get_ollama_client, get_profile_manager, get_remote_machine_service
-from backend.api.routes import ai, alerts, auth, logs, machines, otp_processor, profiles, users, vplus_monitoring
+from backend.api.routes import (
+    ai,
+    alerts,
+    auth,
+    cardinal,
+    debit_portal,
+    logs,
+    machines,
+    otp_processor,
+    profiles,
+    users,
+    vflex,
+    vplus_monitoring,
+)
 from backend.analysis.vplus_alerting import VPlusAvailabilityMonitor, register_vplus_availability_job
 from backend.remote import crypto as remote_crypto
 from backend.remote.scheduler import start_scheduler
@@ -114,3 +127,6 @@ app.include_router(ai.router)
 app.include_router(machines.router)
 app.include_router(vplus_monitoring.router)
 app.include_router(otp_processor.router)
+app.include_router(debit_portal.router)
+app.include_router(cardinal.router)
+app.include_router(vflex.router)

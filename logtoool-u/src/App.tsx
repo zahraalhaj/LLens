@@ -11,6 +11,9 @@ import { StatsView } from './components/StatsView';
 import { ProfilingView } from './components/ProfilingView';
 import { VPlusMonitoringView } from './components/VPlusMonitoringView';
 import { OtpProcessorView } from './components/OtpProcessorView';
+import { DebitPortalView } from './components/DebitPortalView';
+import { CardinalView } from './components/CardinalView';
+import { VFlexView } from './components/VFlexView';
 import { AlertsView } from './components/AlertsView';
 import { ChatView } from './components/ChatView';
 import { SettingsView } from './components/SettingsView';
@@ -136,6 +139,12 @@ function AppShell() {
           {activeTab === 'vplus' && <VPlusMonitoringView />}
 
           {activeTab === 'otp-processor' && <OtpProcessorView />}
+
+          {activeTab === 'debit-portal' && <DebitPortalView />}
+
+          {activeTab === 'cardinal' && <CardinalView />}
+
+          {activeTab === 'vflex' && <VFlexView />}
 
           {activeTab === 'alerts' && <AlertsView />}
 

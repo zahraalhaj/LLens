@@ -19,8 +19,8 @@ class OllamaClient:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "llama3.1:8b-instruct-q4_K_M",
-        timeout_seconds: float = 15.0
+        model: str = "qwen3:8b",
+        timeout_seconds: float = 120.0
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -49,6 +49,7 @@ class OllamaClient:
             "model": self.model,
             "prompt": prompt,
             "stream": False,
+            "think": False,
             "options": {
                 "temperature": 0.0,
             }
@@ -80,6 +81,7 @@ class OllamaClient:
             "prompt": prompt,
             "format": "json",
             "stream": False,
+            "think": False,
             "options": {
                 "temperature": 0.0,
             }
