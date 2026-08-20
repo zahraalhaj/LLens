@@ -20,7 +20,7 @@ class Settings:
 
         self.max_upload_size_mb: int = raw.get("max_upload_size_mb", 500)
         self.ollama_url: str = os.environ.get("OLLAMA_URL", raw.get("ollama_url", "http://localhost:11434"))
-        self.ollama_model: str = os.environ.get("OLLAMA_MODEL", raw.get("ollama_model", "llama3.1:8b-instruct-q4_K_M"))
+        self.ollama_model: str = os.environ.get("OLLAMA_MODEL", raw.get("ollama_model", "qwen3:8b"))
         self.db_path: str = str(BACKEND_DIR / raw.get("db_path", "data/logs.db"))
         self.profiles_dir: str = str(BACKEND_DIR / raw.get("profiles_dir", "profiles"))
         self.default_match_threshold: float = raw.get("default_match_threshold", 0.8)
