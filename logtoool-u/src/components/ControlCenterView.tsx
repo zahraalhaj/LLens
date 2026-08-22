@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { MachineAuthType, PollResult, RemoteMachine } from '../types';
+import { useConfirm } from './ConfirmDialog';
 
 const emptyForm = {
   label: '',
@@ -19,6 +20,7 @@ const emptyForm = {
 };
 
 export const ControlCenterView: React.FC = () => {
+  const confirm = useConfirm();
   const [machines, setMachines] = useState<RemoteMachine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +67,13 @@ export const ControlCenterView: React.FC = () => {
   };
 
   const handleDelete = async (m: RemoteMachine) => {
-    if (!window.confirm(`Remove '${m.label}'? Its ingested logs stay in LLens -- only the connection is removed.`)) return;
+    const confirmed = await confirm({
+      title: 'Remove machine?',
+      message: `Remove '${m.label}'? Its ingested logs stay in LLens -- only the connection is removed.`,
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!confirmed) return;
     try {
       await api.delete(`/api/machines/${m.machine_id}`);
       await loadMachines();

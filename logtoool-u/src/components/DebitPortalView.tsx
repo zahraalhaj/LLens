@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { DebitPortalSummary } from '../types';
+import { DateRangeFilter, DateRangeValue, defaultRange, toIsoRange } from './DateRangeFilter';
 
 const PALETTE = ['#052460', '#036FD0', '#00AEEF', '#04ADA4', '#8892A1', '#3C4B72', '#54C029', '#FF8800', '#2A2F34', '#64748b'];
 
@@ -33,13 +34,15 @@ export const DebitPortalView: React.FC = () => {
   const [report, setReport] = useState<DebitPortalSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lookbackHours, setLookbackHours] = useState(24);
+  const [range, setRange] = useState<DateRangeValue>(defaultRange());
 
-  const fetchReport = async (hours: number) => {
+  const fetchReport = async (r: DateRangeValue) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.get<DebitPortalSummary>(`/api/debit-portal/summary?lookback_hours=${hours}`);
+      const { dateFrom, dateTo } = toIsoRange(r);
+      const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      const data = await api.get<DebitPortalSummary>(`/api/debit-portal/summary?${params}`);
       setReport(data);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Failed to load Debit Portal report');
@@ -49,8 +52,9 @@ export const DebitPortalView: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchReport(lookbackHours);
-  }, [lookbackHours]);
+    fetchReport(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range]);
 
   if (loading && !report) {
     return (
@@ -67,7 +71,7 @@ export const DebitPortalView: React.FC = () => {
         <p className="font-semibold text-sm">Failed to load Debit Portal data</p>
         <p className="text-xs text-rose-600 mt-1">{error}</p>
         <button
-          onClick={() => fetchReport(lookbackHours)}
+          onClick={() => fetchReport(range)}
           className="mt-4 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-semibold cursor-pointer"
         >
           Retry
@@ -87,22 +91,12 @@ export const DebitPortalView: React.FC = () => {
           Issuer, status, and merchant distribution, plus failed/error events for the Debit Portal (Transactions + Errors) log stream.
         </p>
       </div>
-      <div className="flex items-center gap-2">
-        <select
-          value={lookbackHours}
-          onChange={(e) => setLookbackHours(Number(e.target.value))}
-          className="text-xs font-semibold bg-white border border-slate-300 rounded-md px-3 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value={1}>Last 1 hour</option>
-          <option value={6}>Last 6 hours</option>
-          <option value={24}>Last 24 hours</option>
-          <option value={24 * 7}>Last 7 days</option>
-          <option value={24 * 30}>Last 30 days</option>
-        </select>
+      <div className="flex items-end gap-3">
+        <DateRangeFilter value={range} onChange={setRange} />
         <button
-          onClick={() => fetchReport(lookbackHours)}
+          onClick={() => fetchReport(range)}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 mb-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
