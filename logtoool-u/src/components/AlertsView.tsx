@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { BellRing, Send, Mail, CheckCircle2, XCircle, Info, History, Filter } from 'lucide-react';
-import { AlertRule, AlertDispatchHistory } from '../types';
+import { BellRing, Send, Mail, CheckCircle2, XCircle, Info, History, Filter, ExternalLink } from 'lucide-react';
+import { AlertRule, AlertDispatchHistory, DrillThroughTarget } from '../types';
 import { api, ApiError } from '../api';
 
-export const AlertsView: React.FC = () => {
+interface AlertsViewProps {
+  onInvestigate: (target: DrillThroughTarget) => void;
+}
+
+export const AlertsView: React.FC<AlertsViewProps> = ({ onInvestigate }) => {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [history, setHistory] = useState<AlertDispatchHistory | null>(null);
   const [isSending, setIsSending] = useState<boolean>(false);
@@ -150,6 +154,7 @@ export const AlertsView: React.FC = () => {
                   <th className="px-4 py-2.5">Recipient</th>
                   <th className="px-4 py-2.5">Events</th>
                   <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5">Investigation</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-800 font-medium">
@@ -164,6 +169,19 @@ export const AlertsView: React.FC = () => {
                         {e.success ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
                         {e.success ? 'Sent' : 'Failed'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {e.correlation_field && e.correlation_value ? (
+                        <button
+                          onClick={() => onInvestigate({ kind: e.correlation_field as any, value: e.correlation_value as string })}
+                          className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-500 cursor-pointer"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          View
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-300">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

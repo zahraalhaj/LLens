@@ -8,6 +8,8 @@ import {
   ShieldQuestion,
   Users as UsersIcon,
   ServerCog,
+  LayoutDashboard,
+  BrainCircuit,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -16,8 +18,10 @@ export type TabType =
   | 'explore'
   | 'stats'
   | 'payment-monitoring'
+  | 'analytics'
   | 'alerts'
   | 'chat'
+  | 'ai-analyst'
   | 'settings'
   | 'users'
   | 'control-center';
@@ -62,12 +66,24 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'V+, OTP Processor, Debit Portal, Cardinal, and VFlex flows',
         icon: ShieldQuestion,
       },
+      {
+        id: 'analytics',
+        label: 'Cross-Log Analytics',
+        description: 'Service overview, dependency health, queues, investigation, and data quality',
+        icon: LayoutDashboard,
+      },
     ],
   },
   {
     title: 'Assistant',
     items: [
       { id: 'chat', label: 'Chat With Logs', description: 'Ask questions about ingested log data', icon: MessageSquareCode },
+      {
+        id: 'ai-analyst',
+        label: 'AI Analyst',
+        description: 'Ask questions about analyzed transactions, answered only from the deterministic analytical model',
+        icon: BrainCircuit,
+      },
     ],
   },
   {

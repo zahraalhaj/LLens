@@ -12,6 +12,18 @@ aggregations, it doesn't re-parse or re-extract anything.
 from collections import Counter
 from typing import Any, Dict, List
 
+from backend.analysis.normalized_schema import (
+    LogFamily,
+    NormalizedEvent,
+    build_failure_signature,
+    classify_normalized_stage,
+    derive_tracker_type_and_phase,
+    extract_card_last4,
+    looks_like_tracker,
+    mask_email,
+    mask_mobile,
+)
+
 DEFAULT_SOURCE_SYSTEM = "debit_portal_log"
 
 _MAX_FAILED_ITEMS = 100
@@ -103,3 +115,121 @@ def compute_debit_portal_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]
             "items": failed_items[:_MAX_FAILED_ITEMS],
         },
     }
+
+
+def normalize_debit_portal_event(event: Dict[str, Any]) -> NormalizedEvent:
+    """Maps one stored Debit Portal CanonicalLogEvent into the common
+    NormalizedEvent shape (see backend/analysis/normalized_schema.py).
+    Reads `attributes.details.transaction` (the resolved snapshot, once a
+    transaction has been correlated) and falls back to the per-event
+    `attributes.details.parsed` payload for events that haven't resolved to
+    a transaction yet (e.g. an isolated partial event)."""
+    attrs = event.get("attributes") or {}
+    details = attrs.get("details") or {}
+    tx = details.get("transaction") or {}
+    parsed = details.get("parsed") or {}
+    correlation_id = attrs.get("correlation_id")
+
+    trackers = tx.get("trackers") or []
+    tracker_no = (trackers[0] if trackers else None) or parsed.get("tracker_no")
+    if not tracker_no and looks_like_tracker(correlation_id):
+        tracker_no = correlation_id
+    tracker_type, phase = derive_tracker_type_and_phase(tracker_no)
+
+    transaction_id = tx.get("transaction_id")
+    customer = tx.get("customer") or {}
+    if not isinstance(customer, dict):
+        customer = {}
+    mobile = customer.get("mobile") or parsed.get("mobile")
+    email = customer.get("email") or parsed.get("email") or parsed.get("email_to")
+    merchant = tx.get("merchant") or {}
+    if not isinstance(merchant, dict):
+        merchant = {}
+    transaction_info = tx.get("transaction") or parsed.get("transaction") or {}
+    if not isinstance(transaction_info, dict):
+        transaction_info = {}
+    queue = tx.get("queue")
+
+    sensitive_removed: List[str] = []
+    if mobile:
+        sensitive_removed.append("mobile")
+    if email:
+        sensitive_removed.append("email")
+    if parsed.get("otp"):
+        sensitive_removed.append("parsed.otp")
+    if parsed.get("otppan"):
+        sensitive_removed.append("parsed.otppan")
+
+    level = event.get("level")
+    component = event.get("component")
+    parse_status = details.get("parse_status") or "parsed"
+    warnings = tx.get("warnings") or []
+    failure_sig = None
+    if level in ("ERROR", "CRITICAL") or parse_status == "partial":
+        reason = (
+            details.get("parse_warning")
+            or (warnings[0] if warnings else None)
+            or event.get("message")
+            or "unknown_error"
+        )
+        failure_sig = build_failure_signature(LogFamily.DEBIT_PORTAL, component, reason)
+
+    confidence = 1.0 if transaction_id else (0.5 if tracker_no else 0.2)
+    error = tx.get("error")
+
+    return NormalizedEvent(
+        source_file=event.get("file_name") or "",
+        log_family=LogFamily.DEBIT_PORTAL,
+        event_no=event.get("line_no") or 0,
+        physical_line_start=None,  # not tracked by this parser's adapter -- see Phase 2 limitations
+        raw_reference=event.get("raw") or "",
+        source_event_id=event.get("event_id"),
+        batch_id=event.get("batch_id"),
+        event_timestamp=event.get("ts_utc"),
+        level=level,
+        tracker_no=tracker_no,
+        tracker_type=tracker_type,
+        phase=phase,
+        event_type=component,
+        transaction_id=transaction_id,
+        ds_transaction_id=None,  # Debit Portal is not a 3DS-flow log family
+        stepup_request_id=None,
+        credential_id=None,
+        correlation_id=correlation_id,
+        tran_ref=None,
+        oob_tracker_id=None,
+        msg_id=None,
+        issuer_id=tx.get("issuer_id"),
+        bank_org=None,
+        merchant_name=merchant.get("name"),
+        merchant_id=merchant.get("id"),
+        amount=transaction_info.get("amount"),
+        currency=transaction_info.get("currency"),
+        card_last4=extract_card_last4(parsed.get("masked_card")),
+        channel=None,
+        masked_mobile=mask_mobile(mobile),
+        masked_email=mask_email(email),
+        customer_id=None,
+        authentication_method="OTP" if (tx.get("otp_processed") or parsed.get("otp")) else None,
+        credential_type=None,
+        verification_token_present=False,
+        otp_reference_code=None,
+        stepup_status=tx.get("status"),
+        oob_status=None,
+        card_blocked=None,
+        dependency_name=None,
+        endpoint=None,
+        queue_name=queue if isinstance(queue, str) else None,
+        response_code=None,
+        http_status=None,
+        business_error_code=(error if isinstance(error, str) else None),
+        latency_ms=None,
+        normalized_stage=classify_normalized_stage(component, level),
+        terminal_status=tx.get("integrity_status") or tx.get("status"),
+        failure_signature=failure_sig,
+        parse_status=parse_status,
+        used_fallback_parsing=parsed.get("parse_method") == "regex_xml_fallback",
+        correlation_confidence=confidence,
+        evidence_level="full" if event.get("raw") else "partial",
+        sensitive_fields_removed=sensitive_removed,
+    )

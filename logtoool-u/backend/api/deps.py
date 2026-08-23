@@ -20,6 +20,8 @@ from backend.auth.service import AuthenticatedUser, AuthService
 from backend.core.ingest import LogIngestionEngine
 from backend.core.profiles import ProfileManager
 from backend.core.store import DatabaseManager
+from backend.llm.ai_analyst import AIAnalystAssistant
+from backend.llm.audit import AIAnalystAuditLog
 from backend.llm.chat import LogChatAssistant
 from backend.llm.client import OllamaClient
 from backend.llm.explain import LogExplainer
@@ -71,6 +73,16 @@ def get_explainer() -> LogExplainer:
 @lru_cache
 def get_chat_assistant() -> LogChatAssistant:
     return LogChatAssistant(db_manager=get_db(), ollama_client=get_ollama_client())
+
+
+@lru_cache
+def get_ai_analyst_assistant() -> AIAnalystAssistant:
+    return AIAnalystAssistant(ollama_client=get_ollama_client())
+
+
+@lru_cache
+def get_ai_analyst_audit_log() -> AIAnalystAuditLog:
+    return AIAnalystAuditLog(db_path=settings.db_path)
 
 
 @lru_cache

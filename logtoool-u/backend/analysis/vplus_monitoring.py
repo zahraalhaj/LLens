@@ -17,6 +17,17 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from backend.analysis.normalized_schema import (
+    LogFamily,
+    NormalizedEvent,
+    build_failure_signature,
+    classify_normalized_stage,
+    derive_tracker_type_and_phase,
+    looks_like_tracker,
+    mask_email,
+    mask_mobile,
+)
+
 VPLUS_COMPONENTS = {"vplus_input", "vplus_response", "netcetera_response"}
 
 # Matches parser_AFS_Netcetera.py's DEFAULT_SOURCE_SYSTEM -- kept here too
@@ -517,3 +528,119 @@ def compute_investigation_summary(
         "most_affected_merchants": dict(merchant_error_counts.most_common(10)),
         "most_affected_issuers": dict(issuer_error_counts.most_common(10)),
     }
+
+
+# -- 8. Normalization (Phase 2 of the multi-log analysis strategy) -----------
+
+def normalize_netcetera_event(event: Dict[str, Any]) -> NormalizedEvent:
+    """Maps one stored AFS/Netcetera CanonicalLogEvent into the common
+    NormalizedEvent shape (see backend/analysis/normalized_schema.py).
+
+    LIMITATION: parser_AFS_Netcetera.py's parse_log_file() adapter attaches
+    a deliberately compact `details.transaction` snapshot to each event (by
+    its own docstring: "not the transaction's full nested event list, to
+    avoid duplicating every sibling event's data") -- payment/card data and
+    the initiate_action-side stepup_request_id/sms_msg_id are NOT included
+    in that snapshot, only in the parser's internal, non-persisted
+    tx_context. So card_last4, stepup_request_id, and oob_tracker_id are
+    unavailable at this layer for this family; they read as None here, not
+    as parsing failures. See the Phase 2 report for the full note."""
+    attrs = event.get("attributes") or {}
+    details = attrs.get("details") or {}
+    tx = details.get("transaction") or {}
+    correlation_id = attrs.get("correlation_id")
+
+    tracker_no = details.get("tracker_no")
+    if not tracker_no and looks_like_tracker(correlation_id):
+        tracker_no = correlation_id
+    tracker_type = details.get("tracker_type")
+    derived_type, derived_phase = derive_tracker_type_and_phase(tracker_no)
+    tracker_type = tracker_type or derived_type
+
+    transaction_id = tx.get("transaction_id")
+    derived = tx.get("derived") or {}
+    customer = tx.get("customer") or {}
+    merchant = tx.get("merchant") or {}
+    transaction_info = tx.get("transaction_info") or {}
+    stepup_status = tx.get("stepup_status")
+
+    sensitive_removed: List[str] = []
+    if customer.get("mobile"):
+        sensitive_removed.append("customer.mobile")
+    if customer.get("email"):
+        sensitive_removed.append("customer.email")
+
+    level = event.get("level")
+    component = event.get("component")
+    is_unparsed = component == "unparsed"
+    failure_sig = None
+    if level in ("ERROR", "CRITICAL") or is_unparsed:
+        reason = event.get("message") or "unparsed_event"
+        failure_sig = build_failure_signature(LogFamily.NETCETERA_VPLUS, component, reason)
+
+    confidence = 1.0 if transaction_id else (0.5 if tracker_no else 0.2)
+
+    authentication_method = "STEPUP" if derived.get("has_stepup") else ("OTP" if derived.get("has_initiate_action") else None)
+    channel = "SMS" if derived.get("has_sms") else ("EMAIL" if derived.get("has_email") else None)
+
+    # The only case a true original file line number survives to this
+    # layer: failed-to-parse lines, which the adapter records verbatim
+    # (see parser_AFS_Netcetera.py's parse_log_file, the `for failed in
+    # failed_lines` branch) rather than dropping.
+    physical_line_start = details.get("line_no") if is_unparsed and isinstance(details.get("line_no"), int) else None
+
+    return NormalizedEvent(
+        source_file=event.get("file_name") or "",
+        log_family=LogFamily.NETCETERA_VPLUS,
+        event_no=event.get("line_no") or 0,
+        physical_line_start=physical_line_start,
+        raw_reference=event.get("raw") or "",
+        source_event_id=event.get("event_id"),
+        batch_id=event.get("batch_id"),
+        event_timestamp=event.get("ts_utc"),
+        level=level,
+        tracker_no=tracker_no,
+        tracker_type=tracker_type,
+        phase=derived_phase,
+        event_type=component,
+        transaction_id=transaction_id,
+        ds_transaction_id=transaction_id,  # same rationale as Cardinal: this family's TransactionId is the shared 3DS DS transaction id
+        stepup_request_id=None,  # not retained in this family's per-event details snapshot -- see docstring above
+        credential_id=None,
+        correlation_id=correlation_id,
+        tran_ref=None,
+        oob_tracker_id=None,
+        msg_id=details.get("msg_id"),
+        issuer_id=tx.get("issuer_id"),
+        bank_org=None,
+        merchant_name=merchant.get("name"),
+        merchant_id=merchant.get("id"),
+        amount=transaction_info.get("amount"),
+        currency=transaction_info.get("currency"),
+        card_last4=None,  # not exposed at this layer -- see docstring above
+        channel=channel,
+        masked_mobile=mask_mobile(customer.get("mobile")),
+        masked_email=mask_email(customer.get("email")),
+        customer_id=None,
+        authentication_method=authentication_method,
+        credential_type=None,
+        verification_token_present=False,
+        otp_reference_code=None,
+        stepup_status=stepup_status,
+        oob_status=None,
+        card_blocked=None,
+        dependency_name=None,
+        endpoint=None,
+        queue_name=None,
+        response_code=None,
+        http_status=None,
+        business_error_code=None,
+        latency_ms=None,  # this family's own compute_response_time_stats() already owns per-request latency; not duplicated here
+        normalized_stage=classify_normalized_stage(component, level),
+        terminal_status=("SUCCESS" if derived.get("is_success") else stepup_status),
+        failure_signature=failure_sig,
+        parse_status="failed" if is_unparsed else "parsed",
+        correlation_confidence=confidence,
+        evidence_level="full" if event.get("raw") else "minimal",
+        sensitive_fields_removed=sensitive_removed,
+    )

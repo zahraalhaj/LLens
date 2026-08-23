@@ -9,13 +9,15 @@ import { UploadView } from './components/UploadView';
 import { ExploreView } from './components/ExploreView';
 import { StatsView } from './components/StatsView';
 import { PaymentMonitoringView } from './components/PaymentMonitoringView';
+import { AnalyticsView } from './components/AnalyticsView';
 import { AlertsView } from './components/AlertsView';
 import { ChatView } from './components/ChatView';
+import { AIAnalystView } from './components/AIAnalystView';
 import { SettingsView } from './components/SettingsView';
 import { UsersView } from './components/UsersView';
 import { ControlCenterView } from './components/ControlCenterView';
 import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
-import { ParserProfile, LogStats } from './types';
+import { ParserProfile, LogStats, DrillThroughTarget } from './types';
 import { api } from './api';
 
 function AppShell() {
@@ -26,6 +28,15 @@ function AppShell() {
   const [stats, setStats] = useState<LogStats | null>(null);
   const [ollamaAvailable, setOllamaAvailable] = useState(false);
   const [engineOnline, setEngineOnline] = useState<boolean | null>(null);
+  // Lets a view OUTSIDE Analytics (e.g. AlertsView's "View Investigation"
+  // button) drill through into the Investigation tab -- switches to the
+  // Analytics tab and hands the target to AnalyticsView, which forwards it
+  // to InvestigationView the same way its own internal charts already do.
+  const [analyticsTarget, setAnalyticsTarget] = useState<DrillThroughTarget | null>(null);
+  const investigateFromAnywhere = (target: DrillThroughTarget) => {
+    setAnalyticsTarget(target);
+    setActiveTab('analytics');
+  };
   // Bumped after any operation that mutates the underlying log data
   // (clear, load samples) and used as a remount key on the active view --
   // each view fetches its own data on mount, so remounting is the simplest
@@ -155,9 +166,15 @@ function AppShell() {
 
             {activeTab === 'payment-monitoring' && <PaymentMonitoringView />}
 
-            {activeTab === 'alerts' && <AlertsView />}
+            {activeTab === 'analytics' && (
+              <AnalyticsView externalTarget={analyticsTarget} onConsumeExternalTarget={() => setAnalyticsTarget(null)} />
+            )}
+
+            {activeTab === 'alerts' && <AlertsView onInvestigate={investigateFromAnywhere} />}
 
             {activeTab === 'chat' && <ChatView ollamaAvailable={ollamaAvailable} />}
+
+            {activeTab === 'ai-analyst' && <AIAnalystView ollamaAvailable={ollamaAvailable} isAdmin={user.role === 'admin'} />}
 
             {activeTab === 'settings' && (
               <SettingsView profiles={profiles} onRefreshProfiles={fetchProfiles} ollamaAvailable={ollamaAvailable} isAdmin={user.role === 'admin'} />

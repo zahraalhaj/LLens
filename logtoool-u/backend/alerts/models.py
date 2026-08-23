@@ -53,6 +53,16 @@ class AlertDispatchLogModel(Base):
     status_message = Column(Text, nullable=True)
     event_count = Column(Integer, nullable=False, default=1)
 
+    # Best-effort correlation identifier for the triggering event, so the
+    # frontend can deep-link "View Investigation" straight into the
+    # correlated flow/case model (backend/analysis/dashboards.py's
+    # search_flows()). Nullable -- older rows, manual test-sends, and any
+    # event whose attributes carried no correlation_id all leave these
+    # None. For digest mode (many events per dispatch), this is the FIRST
+    # matching event's identifier only, not a per-event mapping.
+    correlation_field = Column(String, nullable=True)
+    correlation_value = Column(String, nullable=True)
+
 
 class AlertDedupStateModel(Base):
     """Persisted (not in-memory) suppression-window tracking, keyed by

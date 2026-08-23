@@ -15,7 +15,9 @@ from backend.api.config import settings
 from backend.api.deps import get_auth_service, get_db, get_email_dispatcher, get_ollama_client, get_profile_manager, get_remote_machine_service
 from backend.api.routes import (
     ai,
+    ai_analyst,
     alerts,
+    analytics,
     auth,
     cardinal,
     debit_portal,
@@ -130,3 +132,5 @@ app.include_router(otp_processor.router)
 app.include_router(debit_portal.router)
 app.include_router(cardinal.router)
 app.include_router(vflex.router)
+app.include_router(analytics.router)
+app.include_router(ai_analyst.router)

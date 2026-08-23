@@ -15,6 +15,18 @@ log timestamps.
 from collections import Counter
 from typing import Any, Dict, List
 
+from backend.analysis.normalized_schema import (
+    LogFamily,
+    NormalizedEvent,
+    build_failure_signature,
+    classify_normalized_stage,
+    derive_tracker_type_and_phase,
+    extract_card_last4,
+    looks_like_tracker,
+    mask_email,
+    mask_mobile,
+)
+
 # Matches parser_OTP_Processor.py's DEFAULT_SOURCE_SYSTEM -- kept here too
 # (not imported from the parser module) so this analysis module has no
 # dependency on the custom_parsers package, just a shared convention.
@@ -108,3 +120,115 @@ def compute_otp_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             "items": failed_items[:_MAX_FAILED_ITEMS],
         },
     }
+
+
+def normalize_otp_event(event: Dict[str, Any]) -> NormalizedEvent:
+    """Maps one stored OTP Online Processor CanonicalLogEvent into the
+    common NormalizedEvent shape (see backend/analysis/normalized_schema.py).
+    Reads `attributes.details.record` -- the tracker's final merged record
+    parser_OTP_Processor.py's adapter attaches, which carries a raw `otp`
+    value, a raw `otppan`, and a raw `mobile`/`email` -- none of which are
+    copied forward. `otp_reference_code` is populated from the SMS queue's
+    own message id (`sms_msg_id`), a legitimate non-sensitive reference,
+    never from the OTP value itself."""
+    attrs = event.get("attributes") or {}
+    details = attrs.get("details") or {}
+    record = details.get("record") or {}
+    per_event_parsed = details.get("parsed") or {}
+    correlation_id = attrs.get("correlation_id")
+
+    tracker_no = details.get("tracker_no") or record.get("tracker_no")
+    if not tracker_no and looks_like_tracker(correlation_id):
+        tracker_no = correlation_id
+    tracker_type, phase = derive_tracker_type_and_phase(tracker_no)
+
+    merchant_details = record.get("merchant_details") or {}
+    if not isinstance(merchant_details, dict):
+        merchant_details = {}
+    transaction_info = record.get("transaction") or {}
+    if not isinstance(transaction_info, dict):
+        transaction_info = {}
+
+    mobile = record.get("mobile")
+    email = record.get("email")
+
+    sensitive_removed: List[str] = []
+    if mobile:
+        sensitive_removed.append("record.mobile")
+    if email:
+        sensitive_removed.append("record.email")
+    if record.get("otp"):
+        sensitive_removed.append("record.otp")
+    if record.get("otppan"):
+        sensitive_removed.append("record.otppan")
+
+    level = event.get("level")
+    component = event.get("component")
+    parse_error = details.get("parse_error")
+    failure_sig = None
+    if level in ("ERROR", "CRITICAL") or parse_error or component == "other":
+        reason = parse_error or event.get("message") or "unclassified_event"
+        failure_sig = build_failure_signature(LogFamily.OTP_PROCESSOR, component, reason)
+
+    # No transaction/stepup-level identifier exists in this family -- the
+    # tracker number is the strongest identifier available, unlike
+    # Cardinal/VFlex/Netcetera which can resolve a transaction_id.
+    confidence = 0.5 if tracker_no else 0.2
+    channel = "EMAIL" if email else ("SMS" if mobile else None)
+
+    return NormalizedEvent(
+        source_file=event.get("file_name") or "",
+        log_family=LogFamily.OTP_PROCESSOR,
+        event_no=event.get("line_no") or 0,
+        physical_line_start=None,  # not tracked by this parser's adapter -- see Phase 2 limitations
+        raw_reference=event.get("raw") or "",
+        source_event_id=event.get("event_id"),
+        batch_id=event.get("batch_id"),
+        event_timestamp=event.get("ts_utc"),
+        level=level,
+        tracker_no=tracker_no,
+        tracker_type=tracker_type,
+        phase=phase,
+        event_type=component,
+        transaction_id=None,
+        ds_transaction_id=None,
+        stepup_request_id=None,
+        credential_id=None,
+        correlation_id=correlation_id,
+        tran_ref=None,
+        oob_tracker_id=None,
+        msg_id=record.get("sms_msg_id"),
+        issuer_id=None,
+        bank_org=record.get("org"),
+        merchant_name=record.get("merchant"),
+        merchant_id=merchant_details.get("id"),
+        amount=transaction_info.get("amount"),
+        currency=transaction_info.get("currency"),
+        card_last4=extract_card_last4(record.get("masked_card")),
+        channel=channel,
+        masked_mobile=mask_mobile(mobile),
+        masked_email=mask_email(email),
+        customer_id=None,
+        authentication_method="OTP",
+        credential_type=channel,
+        verification_token_present=False,
+        otp_reference_code=record.get("sms_msg_id"),
+        stepup_status=None,
+        oob_status=None,
+        card_blocked=None,
+        dependency_name="otp_processor_queue" if record.get("queue") else None,
+        endpoint=None,
+        queue_name=record.get("queue") if isinstance(record.get("queue"), str) else None,
+        response_code=None,
+        http_status=None,
+        business_error_code=None,
+        latency_ms=None,
+        normalized_stage=classify_normalized_stage(component, level),
+        terminal_status=("PROCESSED" if record.get("otp_processed") else None),
+        failure_signature=failure_sig,
+        parse_status="failed" if parse_error else "parsed",
+        used_fallback_parsing=(record.get("parse_method") or per_event_parsed.get("parse_method")) == "regex_fallback",
+        correlation_confidence=confidence,
+        evidence_level="full" if event.get("raw") else "partial",
+        sensitive_fields_removed=sensitive_removed,
+    )

@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.alerts.email import EmailDispatcher
@@ -22,6 +22,19 @@ from backend.alerts.state import AlertDeduplicationEngine
 from backend.core.store import Base
 
 logger = logging.getLogger("logtool.alerts.rules")
+
+
+def _extract_correlation_identifier(event: Dict[str, Any]) -> Optional[str]:
+    """Best-effort identifier for deep-linking an alert into the
+    Investigation dashboard. correlation_id is the one field every
+    family's normalize_<family>_event() reads from the SAME top-level
+    attributes.correlation_id path (see backend/analysis/*.py) -- the only
+    identifier this family-agnostic alert engine (fires on ANY ingested
+    log, not just the 5 payment families) can extract without hardcoding
+    per-family nested payload shapes like transaction_id/tracker_no."""
+    attrs = event.get("attributes") or {}
+    value = attrs.get("correlation_id")
+    return str(value) if value else None
 
 
 def _matches_rule(event: Dict[str, Any], rule: Dict[str, Any]) -> bool:
@@ -54,7 +67,23 @@ class AlertRulesProcessor:
             f"sqlite:///{db_path}", connect_args={"check_same_thread": False, "timeout": 30.0}, echo=False
         )
         Base.metadata.create_all(self.engine)
+        self._ensure_correlation_columns()
         self.Session = sessionmaker(bind=self.engine)
+
+    def _ensure_correlation_columns(self) -> None:
+        """Base.metadata.create_all() only creates missing TABLES, not
+        missing COLUMNS on tables that already exist -- a database created
+        before correlation_field/correlation_value existed needs a one-time
+        ALTER TABLE. Same pattern as backend/auth/service.py's
+        _ensure_must_change_password_column() -- no migration framework in
+        this project yet, deliberately minimal and idempotent."""
+        with self.engine.connect() as conn:
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(alert_dispatch_log)")).fetchall()]
+            if cols and "correlation_field" not in cols:
+                conn.execute(text("ALTER TABLE alert_dispatch_log ADD COLUMN correlation_field VARCHAR"))
+                conn.execute(text("ALTER TABLE alert_dispatch_log ADD COLUMN correlation_value VARCHAR"))
+                conn.commit()
+                logger.info("Migrated alert_dispatch_log table: added correlation_field/correlation_value columns.")
 
     def evaluate_batch_alerts(self, batch_id: str, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         triggered: List[Dict[str, Any]] = []
@@ -86,7 +115,9 @@ class AlertRulesProcessor:
                         f"Message:\n{msg}\n\n"
                         f"Raw Log:\n{e.get('raw')}\n"
                     )
-                    self._dispatch_and_log(rule, batch_id, subject, body, event_count=1)
+                    self._dispatch_and_log(
+                        rule, batch_id, subject, body, event_count=1, correlation_value=_extract_correlation_identifier(e)
+                    )
                     triggered.append({"rule": rule["name"], "mode": "immediate", "source": source, "component": comp})
 
             else:  # digest
@@ -108,12 +139,27 @@ class AlertRulesProcessor:
                     f"Total matching events: {len(matching)}\n\n"
                     f"Sample events:\n{sample_lines}\n"
                 )
-                self._dispatch_and_log(rule, batch_id, subject, body, event_count=len(matching))
+                # Best-effort only: one dispatch row covers ALL `matching`
+                # events, but only the FIRST one's identifier is stored --
+                # a full per-event mapping would need a many-rows-per-
+                # dispatch model this table doesn't have.
+                self._dispatch_and_log(
+                    rule, batch_id, subject, body, event_count=len(matching),
+                    correlation_value=_extract_correlation_identifier(matching[0]),
+                )
                 triggered.append({"rule": rule["name"], "mode": "digest", "source": source, "count": len(matching)})
 
         return triggered
 
-    def _dispatch_and_log(self, rule: Dict[str, Any], batch_id: str, subject: str, body: str, event_count: int) -> None:
+    def _dispatch_and_log(
+        self,
+        rule: Dict[str, Any],
+        batch_id: str,
+        subject: str,
+        body: str,
+        event_count: int,
+        correlation_value: Optional[str] = None,
+    ) -> None:
         success, status_msg = self.email_dispatcher.send_alert_email(
             subject, body, recipient_override=rule["recipients"]
         )
@@ -133,6 +179,8 @@ class AlertRulesProcessor:
                     success=1 if success else 0,
                     status_message=status_msg,
                     event_count=event_count,
+                    correlation_field="correlation_id" if correlation_value else None,
+                    correlation_value=correlation_value,
                 )
             )
             session.commit()
@@ -184,6 +232,8 @@ class AlertRulesProcessor:
                         "success": bool(r.success),
                         "status_message": r.status_message,
                         "event_count": r.event_count,
+                        "correlation_field": r.correlation_field,
+                        "correlation_value": r.correlation_value,
                     }
                     for r in rows
                 ],

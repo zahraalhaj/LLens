@@ -12,6 +12,18 @@ doesn't re-parse or re-extract anything.
 from collections import Counter
 from typing import Any, Dict, List
 
+from backend.analysis.normalized_schema import (
+    LogFamily,
+    NormalizedEvent,
+    build_failure_signature,
+    classify_normalized_stage,
+    derive_tracker_type_and_phase,
+    extract_card_last4,
+    looks_like_tracker,
+    mask_email,
+    mask_mobile,
+)
+
 DEFAULT_SOURCE_SYSTEM = "vflex_transaction_log"
 
 _MAX_FAILED_ITEMS = 100
@@ -111,3 +123,123 @@ def compute_vflex_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             "items": failed_items[:_MAX_FAILED_ITEMS],
         },
     }
+
+
+def normalize_vflex_event(event: Dict[str, Any]) -> NormalizedEvent:
+    """Maps one stored VFlex CanonicalLogEvent into the common
+    NormalizedEvent shape (see backend/analysis/normalized_schema.py).
+    Reads `attributes.details.transaction` -- the resolved tracker-record
+    snapshot parser_VFlex.py's adapter already attaches, including the
+    already-masked `payment.masked_card`/`payment.last4_pan` fields and the
+    raw `otp.value`/`otp.sms_message_decoded` fields that must never be
+    copied forward."""
+    attrs = event.get("attributes") or {}
+    details = attrs.get("details") or {}
+    tx = details.get("transaction") or {}
+    correlation_id = attrs.get("correlation_id")
+
+    tracker_no = tx.get("tracker_no")
+    if not tracker_no and looks_like_tracker(correlation_id):
+        tracker_no = correlation_id
+    tracker_type = tx.get("tracker_type")
+    phase = tx.get("phase")
+    derived_type, derived_phase = derive_tracker_type_and_phase(tracker_no)
+    tracker_type = tracker_type or derived_type
+    phase = phase or derived_phase
+
+    customer = tx.get("customer") or {}
+    merchant = tx.get("merchant") or {}
+    transaction_info = tx.get("transaction") or {}
+    payment = tx.get("payment") or {}
+    bank_api = tx.get("bank_api") or {}
+    otp = tx.get("otp") or {}
+    queue = tx.get("queue") or {}
+    error = tx.get("error") or {}
+
+    sensitive_removed: List[str] = []
+    if customer.get("mobile"):
+        sensitive_removed.append("customer.mobile")
+    if customer.get("email"):
+        sensitive_removed.append("customer.email")
+    if otp.get("value"):
+        sensitive_removed.append("otp.value")
+    if otp.get("sms_message_decoded"):
+        sensitive_removed.append("otp.sms_message_decoded")
+    if otp.get("sms_message_base64"):
+        sensitive_removed.append("otp.sms_message_base64")
+    if tx.get("verification_token"):
+        sensitive_removed.append("verification_token")
+
+    level = event.get("level")
+    component = event.get("component")
+    parse_status = details.get("parse_status") or "parsed"
+    warnings = details.get("warnings") or tx.get("warnings") or []
+    # parser_VFlex.py appends this exact literal warning when a JSON
+    # payload couldn't be parsed cleanly and had to go through
+    # fallback_json_fields() instead of normal JSON parsing.
+    used_fallback_parsing = any("fallback parsing" in w for w in warnings if w)
+    failure_sig = None
+    if level in ("ERROR", "CRITICAL") or parse_status == "partial":
+        reason = (warnings[0] if warnings else None) or error.get("description") or event.get("message") or "unknown_error"
+        failure_sig = build_failure_signature(LogFamily.VFLEX, component, reason)
+
+    transaction_id = tx.get("transaction_id")
+    stepup_request_id = tx.get("stepup_request_id")
+    confidence = 1.0 if transaction_id else (0.7 if stepup_request_id else (0.5 if tracker_no else 0.2))
+
+    return NormalizedEvent(
+        source_file=event.get("file_name") or "",
+        log_family=LogFamily.VFLEX,
+        event_no=event.get("line_no") or 0,
+        physical_line_start=None,  # not tracked by this parser's adapter -- see Phase 2 limitations
+        raw_reference=event.get("raw") or "",
+        source_event_id=event.get("event_id"),
+        batch_id=event.get("batch_id"),
+        event_timestamp=event.get("ts_utc"),
+        level=level,
+        tracker_no=tracker_no,
+        tracker_type=tracker_type,
+        phase=phase,
+        event_type=component,
+        transaction_id=transaction_id,
+        ds_transaction_id=None,  # VFlex is not a 3DS Directory Server log family
+        stepup_request_id=stepup_request_id,
+        credential_id=None,
+        correlation_id=correlation_id,
+        tran_ref=bank_api.get("transaction_reference"),
+        oob_tracker_id=None,
+        msg_id=queue.get("message_id"),
+        issuer_id=tx.get("issuer_id"),
+        bank_org=None,
+        merchant_name=merchant.get("name"),
+        merchant_id=None,
+        amount=transaction_info.get("amount"),
+        currency=transaction_info.get("currency"),
+        card_last4=extract_card_last4(payment.get("last4_pan"), payment.get("masked_card")),
+        channel=otp.get("channel"),
+        masked_mobile=mask_mobile(customer.get("mobile")),
+        masked_email=mask_email(customer.get("email")),
+        customer_id=customer.get("client_customer_id"),
+        authentication_method=(tx.get("stepup_type") or ("OTP" if otp.get("channel") else None)),
+        credential_type=otp.get("channel"),
+        verification_token_present=bool(tx.get("verification_token")),
+        otp_reference_code=None,  # VFlex surfaces no distinct reference id -- only the raw OTP value, which must never be stored
+        stepup_status=tx.get("status"),
+        oob_status=None,
+        card_blocked=None,
+        dependency_name="bank_api" if (bank_api.get("url") or bank_api.get("operation")) else None,
+        endpoint=bank_api.get("url"),
+        queue_name=queue.get("name"),
+        response_code=bank_api.get("org_number"),
+        http_status=None,
+        business_error_code=error.get("reference_number"),
+        latency_ms=None,
+        normalized_stage=classify_normalized_stage(component, level),
+        terminal_status=tx.get("integrity_status") or tx.get("status"),
+        failure_signature=failure_sig,
+        parse_status=parse_status,
+        used_fallback_parsing=used_fallback_parsing,
+        correlation_confidence=confidence,
+        evidence_level="full" if event.get("raw") else "partial",
+        sensitive_fields_removed=sensitive_removed,
+    )

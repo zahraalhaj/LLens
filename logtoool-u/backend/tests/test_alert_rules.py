@@ -24,11 +24,14 @@ def processor(tmp_path, rule_manager):
     )
 
 
-def make_event(level="ERROR", source="svc-a", component="db", message="something broke", line_no=1):
-    return {
+def make_event(level="ERROR", source="svc-a", component="db", message="something broke", line_no=1, correlation_id=None):
+    event = {
         "level": level, "source_system": source, "component": component, "message": message,
         "line_no": line_no, "ts_utc": "2026-08-15T10:00:00Z", "raw": f"raw: {message}",
     }
+    if correlation_id is not None:
+        event["attributes"] = {"correlation_id": correlation_id}
+    return event
 
 
 # -- level_meets_threshold ---------------------------------------------------
@@ -249,3 +252,51 @@ def test_dispatch_history_pagination(rule_manager, processor):
     page1 = processor.get_dispatch_history(page=1, page_size=2)
     assert len(page1["entries"]) == 2
     assert page1["total"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Feature 6: Alert -> Investigation deep link (correlation_field/correlation_value)
+# ---------------------------------------------------------------------------
+
+
+def test_immediate_alert_persists_correlation_identifier(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="critical-now", min_level="CRITICAL", mode="immediate", dedup_window_minutes=0)
+
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL", correlation_id="TXN-ALERT-1")])
+    entry = processor.get_dispatch_history()["entries"][0]
+    assert entry["correlation_field"] == "correlation_id"
+    assert entry["correlation_value"] == "TXN-ALERT-1"
+
+
+def test_immediate_alert_without_correlation_id_leaves_fields_none(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="critical-now", min_level="CRITICAL", mode="immediate", dedup_window_minutes=0)
+
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL")])
+    entry = processor.get_dispatch_history()["entries"][0]
+    assert entry["correlation_field"] is None
+    assert entry["correlation_value"] is None
+
+
+def test_digest_alert_persists_first_matching_events_identifier(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="error-digest", min_level="ERROR", mode="digest")
+
+    events = [
+        make_event(level="ERROR", line_no=1, correlation_id="TXN-FIRST"),
+        make_event(level="ERROR", line_no=2, correlation_id="TXN-SECOND"),
+    ]
+    processor.evaluate_batch_alerts("batch-1", events)
+    entry = processor.get_dispatch_history()["entries"][0]
+    assert entry["correlation_value"] == "TXN-FIRST"  # first matching event only, documented limitation
+
+
+def test_manual_dispatch_leaves_correlation_fields_none(rule_manager, processor):
+    processor.log_manual_dispatch("test", True, "ok", "a@b.com")
+    entry = processor.get_dispatch_history()["entries"][0]
+    assert entry["correlation_field"] is None
+    assert entry["correlation_value"] is None
