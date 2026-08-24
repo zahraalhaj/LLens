@@ -291,6 +291,7 @@ export interface VPlusFullReport {
   response_times: VPlusResponseTimeReport;
   sms_analysis: VPlusSmsReport;
   transaction_breakdown: VPlusTransactionBreakdown;
+  available_merchants: string[];
 }
 
 // -- OTP Online Processor analysis (backend/analysis/otp_processor.py) -----
@@ -320,6 +321,7 @@ export interface OtpProcessorSummary {
   by_queue?: Record<string, number>;
   by_currency?: Record<string, number>;
   top_merchants?: Record<string, number>;
+  available_merchants?: string[];
   otp_processed_count?: number;
   otp_success_rate_pct?: number | null;
   force_verify_count?: number;
@@ -355,6 +357,7 @@ export interface DebitPortalSummary {
   by_status?: Record<string, number>;
   by_currency?: Record<string, number>;
   top_merchants?: Record<string, number>;
+  available_merchants?: string[];
   otp_processed_count?: number;
   checks_needed_count?: number;
   failed_events?: GenericFailedEventsReport;
@@ -375,6 +378,7 @@ export interface CardinalSummary {
   by_bank_org?: Record<string, number>;
   oob_status_counts?: Record<string, number>;
   top_merchants?: Record<string, number>;
+  available_merchants?: string[];
   otp_processed_count?: number;
   checks_needed_count?: number;
   failed_events?: GenericFailedEventsReport;
@@ -484,7 +488,7 @@ export interface QueueMessaging {
   orphan_tracker_nos: string[];
 }
 
-export type SearchField = 'transaction_id' | 'tracker' | 'stepup_request_id' | 'mobile' | 'card_last4' | 'msg_id' | 'correlation_id';
+export type SearchField = 'transaction_id' | 'tracker' | 'stepup_request_id' | 'mobile' | 'card_last4' | 'msg_id' | 'correlation_id' | 'merchant_name';
 
 // A drill-through target: either a resolved flow_id (direct GET, e.g. from
 // a chart aggregation that already carries sample_flow_ids), or a
@@ -695,6 +699,7 @@ export interface VFlexSummary {
   by_bank_operation?: Record<string, number>;
   by_channel?: Record<string, number>;
   top_merchants?: Record<string, number>;
+  available_merchants?: string[];
   otp_processed_count?: number;
   bank_api_success_count?: number;
   checks_needed_count?: number;

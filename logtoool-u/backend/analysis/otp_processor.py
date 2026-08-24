@@ -13,7 +13,7 @@ All timestamps handled here are LLens's own normalized `ts_utc` strings
 log timestamps.
 """
 from collections import Counter
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from backend.analysis.normalized_schema import (
     LogFamily,
@@ -35,6 +35,16 @@ DEFAULT_SOURCE_SYSTEM = "otp_online_processor"
 _MAX_FAILED_ITEMS = 100
 _TOP_MERCHANTS_LIMIT = 15
 _TOP_FAILURE_REASONS_LIMIT = 10
+
+
+def extract_merchant_name(event: Dict[str, Any]) -> Optional[str]:
+    """The merchant name embedded in this event's OTP record snapshot, for
+    the by-merchant filter -- same accessor `compute_otp_summary` uses to
+    build `top_merchants`, just exposed for pre-aggregation filtering.
+    Unlike the other families' `{merchant: {name: ...}}` shape, this
+    record's `merchant` field is already a flat string."""
+    record = ((event.get("attributes") or {}).get("details") or {}).get("record") or {}
+    return record.get("merchant")
 
 
 def _records_by_tracker(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:

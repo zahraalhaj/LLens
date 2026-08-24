@@ -23,6 +23,7 @@ from backend.analysis.dashboards import (
     build_queue_messaging,
     build_security_quality,
     build_service_overview,
+    list_available_merchants,
     search_flows,
     search_flows_by_raw_text,
 )
@@ -109,6 +110,18 @@ def queue_messaging(
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
     return build_queue_messaging(bundle)
+
+
+@router.get("/investigation/merchants")
+def investigation_merchants(
+    lookback_hours: int = Query(24 * 30, ge=1, le=24 * 365),
+    date_from: Optional[str] = _DATE_FROM_Q,
+    date_to: Optional[str] = _DATE_TO_Q,
+    _user: AuthenticatedUser = Depends(get_current_user),
+    db: DatabaseManager = Depends(get_db),
+):
+    bundle = _pipeline(db, lookback_hours, date_from, date_to)
+    return {"merchants": list_available_merchants(bundle)}
 
 
 @router.get("/investigation/search")

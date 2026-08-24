@@ -10,7 +10,7 @@ resolved tracker-record snapshot -- this module reads that plus
 doesn't re-parse or re-extract anything.
 """
 from collections import Counter
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from backend.analysis.normalized_schema import (
     LogFamily,
@@ -29,6 +29,14 @@ DEFAULT_SOURCE_SYSTEM = "vflex_transaction_log"
 _MAX_FAILED_ITEMS = 100
 _TOP_MERCHANTS_LIMIT = 15
 _TOP_FAILURE_REASONS_LIMIT = 10
+
+
+def extract_merchant_name(event: Dict[str, Any]) -> Optional[str]:
+    """The merchant name embedded in this event's transaction snapshot, for
+    the by-merchant filter -- same accessor `compute_vflex_summary` uses to
+    build `top_merchants`, just exposed for pre-aggregation filtering."""
+    tx = ((event.get("attributes") or {}).get("details") or {}).get("transaction") or {}
+    return (tx.get("merchant") or {}).get("name")
 
 
 def _transactions_by_correlation(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:

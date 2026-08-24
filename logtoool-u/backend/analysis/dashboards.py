@@ -322,7 +322,14 @@ def build_queue_messaging(bundle: AnalysisBundle) -> Dict[str, Any]:
 # 4. INVESTIGATION
 # ---------------------------------------------------------------------------
 
-SEARCHABLE_FIELDS = ("transaction_id", "tracker", "stepup_request_id", "mobile", "card_last4", "msg_id", "correlation_id")
+SEARCHABLE_FIELDS = ("transaction_id", "tracker", "stepup_request_id", "mobile", "card_last4", "msg_id", "correlation_id", "merchant_name")
+
+
+def list_available_merchants(bundle: AnalysisBundle) -> List[str]:
+    """Distinct merchant names across every flow in this bundle, for the
+    Investigation search's merchant field -- lets the frontend offer a
+    searchable dropdown instead of requiring an exact free-typed name."""
+    return sorted({f.merchant_name for f in bundle.flows if f.merchant_name})
 
 
 def search_flows(bundle: AnalysisBundle, field: str, query: str) -> List[str]:
@@ -353,6 +360,7 @@ def search_flows(bundle: AnalysisBundle, field: str, query: str) -> List[str]:
         "card_last4": "card_last4",
         "msg_id": "msg_id",
         "correlation_id": "correlation_id",
+        "merchant_name": "merchant_name",
     }
     attr = attr_map[field]
     matched = {f.flow_id for f in bundle.flows if getattr(f, attr, None) == query}

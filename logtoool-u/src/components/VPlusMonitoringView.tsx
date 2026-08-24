@@ -9,6 +9,7 @@ import {
 import { api, ApiError } from '../api';
 import { VPlusFullReport } from '../types';
 import { DateRangeFilter, DateRangeValue, defaultRange, toIsoRange } from './DateRangeFilter';
+import { MerchantFilter } from './MerchantFilter';
 
 const PALETTE = ['#052460', '#54C029', '#FF8800', '#CC1F1F', '#3C4B72', '#2398C9', '#04ADA4', '#2A2F34', '#FF8800', '#8892A1'];
 
@@ -47,6 +48,8 @@ export const VPlusMonitoringView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<DateRangeValue>(defaultRange());
+  const [merchant, setMerchant] = useState('');
+  const [availableMerchants, setAvailableMerchants] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopy = async (text: string, key: string) => {
@@ -59,14 +62,16 @@ export const VPlusMonitoringView: React.FC = () => {
     }
   };
 
-  const fetchReport = async (r: DateRangeValue) => {
+  const fetchReport = async (r: DateRangeValue, m: string) => {
     setLoading(true);
     setError(null);
     try {
       const { dateFrom, dateTo } = toIsoRange(r);
       const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      if (m) params.set('merchant', m);
       const data = await api.get<VPlusFullReport>(`/api/vplus/investigation-summary?${params}`);
       setReport(data);
+      setAvailableMerchants(data.available_merchants || []);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Failed to load V+ monitoring report');
     } finally {
@@ -75,9 +80,9 @@ export const VPlusMonitoringView: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchReport(range);
+    fetchReport(range, merchant);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
+  }, [range, merchant]);
 
   if (loading && !report) {
     return (
@@ -94,7 +99,7 @@ export const VPlusMonitoringView: React.FC = () => {
         <p className="font-semibold text-sm">Failed to load V+ monitoring data</p>
         <p className="text-xs text-rose-600 mt-1">{error}</p>
         <button
-          onClick={() => fetchReport(range)}
+          onClick={() => fetchReport(range, merchant)}
           className="mt-4 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-semibold cursor-pointer"
         >
           Retry
@@ -126,8 +131,9 @@ export const VPlusMonitoringView: React.FC = () => {
         </div>
         <div className="flex items-end gap-3">
           <DateRangeFilter value={range} onChange={setRange} />
+          <MerchantFilter value={merchant} onChange={setMerchant} options={availableMerchants} />
           <button
-            onClick={() => fetchReport(range)}
+            onClick={() => fetchReport(range, merchant)}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 mb-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
           >

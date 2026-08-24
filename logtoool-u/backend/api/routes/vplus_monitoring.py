@@ -13,6 +13,7 @@ from backend.analysis.vplus_monitoring import (
     compute_sms_analysis,
     compute_transaction_breakdown,
     compute_vplus_availability,
+    extract_merchant_name,
 )
 from backend.api.date_range import resolve_date_range
 from backend.api.deps import get_current_user, get_db
@@ -110,6 +111,7 @@ def investigation_summary(
     unresponded_grace_ms: int = Query(DEFAULT_UNRESPONDED_GRACE_MS, ge=0),
     expected_queue_ms: int = Query(DEFAULT_EXPECTED_SMS_QUEUE_MS, ge=1),
     source_system: str = Query(DEFAULT_SOURCE_SYSTEM),
+    merchant: Optional[str] = Query(None),
     _user: AuthenticatedUser = Depends(get_current_user),
     db: DatabaseManager = Depends(get_db),
 ):
@@ -117,6 +119,9 @@ def investigation_summary(
     three reports internally (one shared event fetch, not three separate
     round trips) and cross-references them into a ranked findings list."""
     events = _lookback_events(db, lookback_hours, source_system, date_from, date_to)
+    available_merchants = sorted({m for e in events if (m := extract_merchant_name(e))})
+    if merchant:
+        events = [e for e in events if extract_merchant_name(e) == merchant]
     avail = compute_vplus_availability(
         events,
         gap_threshold_minutes=gap_threshold_minutes,
@@ -133,4 +138,5 @@ def investigation_summary(
         "response_times": rt,
         "sms_analysis": sms,
         "transaction_breakdown": tx_breakdown,
+        "available_merchants": available_merchants,
     }

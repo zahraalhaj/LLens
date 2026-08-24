@@ -59,6 +59,15 @@ def _ms_between(start: Optional[datetime], end: Optional[datetime]) -> Optional[
     return delta_ms if delta_ms >= 0 else None  # negative = out-of-order/clock skew, not a real duration
 
 
+def extract_merchant_name(event: Dict[str, Any]) -> Optional[str]:
+    """The merchant name embedded in this event's transaction snapshot, for
+    the by-merchant filter -- same accessor `compute_investigation_summary`
+    uses to build `most_affected_merchants`, just exposed for
+    pre-aggregation filtering."""
+    tx = ((event.get("attributes") or {}).get("details") or {}).get("transaction") or {}
+    return (tx.get("merchant") or {}).get("name")
+
+
 def group_events_by_transaction(events: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     """Groups stored events by their resolved correlation_id (the
     transaction ID when the parser resolved one, or the tracker number

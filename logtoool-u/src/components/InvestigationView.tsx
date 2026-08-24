@@ -3,6 +3,7 @@ import { Search, FileSearch, ListTree, AlertTriangle, ShieldQuestion, Link2, Cop
 import { api, ApiError } from '../api';
 import { DrillThroughTarget, InvestigationCaseView, InvestigationSearchResponse, InvestigationRawSearchResponse, TimelineEntryView, SearchField } from '../types';
 import { SEVERITY_COLORS } from '../theme';
+import { MerchantFilter } from './MerchantFilter';
 
 const SEARCH_FIELDS: { id: SearchField; label: string }[] = [
   { id: 'transaction_id', label: 'TransactionId' },
@@ -12,6 +13,7 @@ const SEARCH_FIELDS: { id: SearchField; label: string }[] = [
   { id: 'card_last4', label: 'Card Last 4' },
   { id: 'msg_id', label: 'MsgId' },
   { id: 'correlation_id', label: 'CorrelationId' },
+  { id: 'merchant_name', label: 'Merchant' },
 ];
 
 const CONFIDENCE_STYLES: Record<string, string> = {
@@ -44,6 +46,18 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ pendingTar
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [availableMerchants, setAvailableMerchants] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (field !== 'merchant_name' || availableMerchants.length > 0) return;
+    api
+      .get<{ merchants: string[] }>(`/api/analytics/investigation/merchants?lookback_hours=${24 * 90}`)
+      .then((resp) => setAvailableMerchants(resp.merchants))
+      .catch(() => {
+        // best-effort -- the merchant field still works as free text if this fails
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [field]);
 
   const handleCopy = async (text: string, key: string) => {
     try {
@@ -165,15 +179,21 @@ export const InvestigationView: React.FC<InvestigationViewProps> = ({ pendingTar
               </select>
             </div>
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Value</label>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && runSearch(field, query)}
-                placeholder={`Enter ${SEARCH_FIELDS.find((f) => f.id === field)?.label}…`}
-                className="w-full text-xs bg-white border border-slate-300 rounded-md px-2.5 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              {field === 'merchant_name' ? (
+                <MerchantFilter value={query} onChange={setQuery} options={availableMerchants} />
+              ) : (
+                <>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Value</label>
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && runSearch(field, query)}
+                    placeholder={`Enter ${SEARCH_FIELDS.find((f) => f.id === field)?.label}…`}
+                    className="w-full text-xs bg-white border border-slate-300 rounded-md px-2.5 py-2 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </>
+              )}
             </div>
             <button
               onClick={() => runSearch(field, query)}

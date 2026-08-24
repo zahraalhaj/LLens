@@ -10,7 +10,7 @@ to build cross-event aggregations, it doesn't re-parse or re-extract
 anything.
 """
 from collections import Counter
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from backend.analysis.normalized_schema import (
     LogFamily,
@@ -29,6 +29,14 @@ DEFAULT_SOURCE_SYSTEM = "cardinal_stepup_oob_log"
 _MAX_FAILED_ITEMS = 100
 _TOP_MERCHANTS_LIMIT = 15
 _TOP_FAILURE_REASONS_LIMIT = 10
+
+
+def extract_merchant_name(event: Dict[str, Any]) -> Optional[str]:
+    """The merchant name embedded in this event's flow snapshot, for the
+    by-merchant filter -- same accessor `compute_cardinal_summary` uses to
+    build `top_merchants`, just exposed for pre-aggregation filtering."""
+    flow = ((event.get("attributes") or {}).get("details") or {}).get("flow") or {}
+    return (flow.get("merchant") or {}).get("name")
 
 
 def _flows_by_correlation(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
