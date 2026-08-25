@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn } from 'lucide-react';
+import { LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { Logo } from './Logo';
 
@@ -7,6 +7,7 @@ export const Login: React.FC = () => {
   const { login, error } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,7 +26,7 @@ export const Login: React.FC = () => {
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-2 justify-center mb-8">
-          <Logo variant="light" markClassName="w-10 h-8" />
+          <Logo variant="light" markClassName="h-28 w-auto max-w-full" showWordmark={false} />
           <p className="text-xs text-slate-500">Payment Log Visualization & Analytics</p>
         </div>
 
@@ -53,15 +54,26 @@ export const Login: React.FC = () => {
             <label htmlFor="password" className="block text-xs font-semibold text-slate-700 mb-1.5">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-9 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           {error && (

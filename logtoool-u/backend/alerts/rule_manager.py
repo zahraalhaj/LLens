@@ -4,12 +4,13 @@ run so a fresh install isn't alert-silent (mirrors the old hardcoded
 CRITICAL-immediate / ERROR-digest behavior, but as regular editable rows
 now instead of code).
 """
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.alerts.models import AlertRuleModel, AlertRuleSeedMarkerModel
@@ -28,7 +29,7 @@ SEVERITY_ORDER = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR, 
 VALID_MODES = {"immediate", "digest"}
 
 # Fields that mean "no filter" when empty -- stored as NULL, not "".
-OPTIONAL_FILTER_FIELDS = ("source_system_filter", "component_filter", "message_contains", "recipients")
+OPTIONAL_FILTER_FIELDS = ("source_system_filter", "component_filter", "message_contains", "recipients", "notification_group_id")
 
 DEFAULT_RULES = [
     {
@@ -69,8 +70,24 @@ class AlertRuleManager:
             f"sqlite:///{db_path}", connect_args={"check_same_thread": False, "timeout": 30.0}, echo=False
         )
         Base.metadata.create_all(self.engine)
+        self._ensure_notification_columns()
         self.Session = sessionmaker(bind=self.engine)
         self._seed_defaults_if_empty()
+
+    def _ensure_notification_columns(self) -> None:
+        """Base.metadata.create_all() only creates missing TABLES, not
+        missing COLUMNS on tables that already exist -- a database created
+        before notification_group_id/dedup_windows_json existed needs a
+        one-time ALTER TABLE. Same pattern as backend/auth/service.py's
+        _ensure_must_change_password_column() and
+        backend/alerts/rules.py's _ensure_correlation_columns()."""
+        with self.engine.connect() as conn:
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(alert_rules)")).fetchall()]
+            if cols and "notification_group_id" not in cols:
+                conn.execute(text("ALTER TABLE alert_rules ADD COLUMN notification_group_id VARCHAR"))
+                conn.execute(text("ALTER TABLE alert_rules ADD COLUMN dedup_windows_json TEXT"))
+                conn.commit()
+                logger.info("Migrated alert_rules table: added notification_group_id/dedup_windows_json columns.")
 
     def _seed_defaults_if_empty(self) -> None:
         session = self.Session()
@@ -133,6 +150,8 @@ class AlertRuleManager:
         message_contains: Optional[str] = None,
         dedup_window_minutes: int = 60,
         recipients: Optional[str] = None,
+        notification_group_id: Optional[str] = None,
+        dedup_windows: Optional[Dict[str, int]] = None,
         created_by_user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         self._validate(min_level, mode)
@@ -152,6 +171,8 @@ class AlertRuleManager:
                 mode=mode,
                 dedup_window_minutes=dedup_window_minutes,
                 recipients=recipients or None,
+                notification_group_id=notification_group_id or None,
+                dedup_windows_json=json.dumps(dedup_windows) if dedup_windows else None,
                 created_at=now,
                 updated_at=now,
                 created_by_user_id=created_by_user_id,
@@ -187,6 +208,9 @@ class AlertRuleManager:
                 if key in fields:
                     setattr(rule, key, fields[key] or None)  # "" -> NULL (means "no filter")
 
+            if "dedup_windows" in fields:
+                rule.dedup_windows_json = json.dumps(fields["dedup_windows"]) if fields["dedup_windows"] else None
+
             if fields.get("enabled") is not None:
                 rule.enabled = 1 if fields["enabled"] else 0
 
@@ -221,6 +245,10 @@ class AlertRuleManager:
             "mode": r.mode,
             "dedup_window_minutes": r.dedup_window_minutes,
             "recipients": r.recipients,
+            "notification_group_id": r.notification_group_id,
+            # Always the parsed dict (or None) -- callers never hand-parse
+            # the raw JSON column themselves.
+            "dedup_windows": json.loads(r.dedup_windows_json) if r.dedup_windows_json else None,
             "created_at": r.created_at,
             "updated_at": r.updated_at,
         }

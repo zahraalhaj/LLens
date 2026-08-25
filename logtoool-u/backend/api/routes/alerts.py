@@ -1,13 +1,22 @@
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.alerts.email import EmailDispatcher
+from backend.alerts.notification_groups import GroupNameTakenError, GroupNotFoundError, NotificationGroupManager
 from backend.alerts.rule_manager import AlertRuleManager, RuleNameTakenError, RuleNotFoundError
 from backend.alerts.rules import AlertRulesProcessor
 from backend.alerts.state import AlertDeduplicationEngine
-from backend.api.deps import get_alert_processor, get_alert_rule_manager, get_current_user, get_dedup_engine, get_email_dispatcher, require_admin
+from backend.api.deps import (
+    get_alert_processor,
+    get_alert_rule_manager,
+    get_current_user,
+    get_dedup_engine,
+    get_email_dispatcher,
+    get_notification_group_manager,
+    require_admin,
+)
 from backend.auth.service import AuthenticatedUser
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
@@ -22,6 +31,8 @@ class CreateRuleRequest(BaseModel):
     message_contains: Optional[str] = None
     dedup_window_minutes: int = Field(default=60, ge=1)
     recipients: Optional[str] = None  # comma-separated; empty = server default
+    notification_group_id: Optional[str] = None  # takes precedence over `recipients` when set
+    dedup_windows: Optional[Dict[str, int]] = None  # severity name -> minutes; unset severities fall back to dedup_window_minutes
 
 
 class UpdateRuleRequest(BaseModel):
@@ -34,10 +45,22 @@ class UpdateRuleRequest(BaseModel):
     message_contains: Optional[str] = None
     dedup_window_minutes: Optional[int] = Field(default=None, ge=1)
     recipients: Optional[str] = None
+    notification_group_id: Optional[str] = None
+    dedup_windows: Optional[Dict[str, int]] = None
 
 
 class TestAlertRequest(BaseModel):
     recipient_override: Optional[str] = None
+
+
+class CreateGroupRequest(BaseModel):
+    name: str
+    emails: str  # comma-separated
+
+
+class UpdateGroupRequest(BaseModel):
+    name: Optional[str] = None
+    emails: Optional[str] = None
 
 
 @router.get("/rules")
@@ -135,4 +158,61 @@ def reset_dedup_state(
     dedup: AlertDeduplicationEngine = Depends(get_dedup_engine),
 ):
     dedup.clear_state()
+    return {"ok": True}
+
+
+@router.get("/groups")
+def list_groups(
+    _user: AuthenticatedUser = Depends(get_current_user),
+    manager: NotificationGroupManager = Depends(get_notification_group_manager),
+):
+    return manager.list_groups()
+
+
+@router.post("/groups")
+def create_group(
+    body: CreateGroupRequest,
+    _admin: AuthenticatedUser = Depends(require_admin),
+    manager: NotificationGroupManager = Depends(get_notification_group_manager),
+):
+    try:
+        return manager.create_group(body.name, body.emails)
+    except GroupNameTakenError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.get("/groups/{group_id}")
+def get_group(
+    group_id: str,
+    _user: AuthenticatedUser = Depends(get_current_user),
+    manager: NotificationGroupManager = Depends(get_notification_group_manager),
+):
+    try:
+        return manager.get_group(group_id)
+    except GroupNotFoundError:
+        raise HTTPException(status_code=404, detail="Notification group not found")
+
+
+@router.put("/groups/{group_id}")
+def update_group(
+    group_id: str,
+    body: UpdateGroupRequest,
+    _admin: AuthenticatedUser = Depends(require_admin),
+    manager: NotificationGroupManager = Depends(get_notification_group_manager),
+):
+    try:
+        return manager.update_group(group_id, name=body.name, emails=body.emails)
+    except GroupNotFoundError:
+        raise HTTPException(status_code=404, detail="Notification group not found")
+    except GroupNameTakenError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.delete("/groups/{group_id}")
+def delete_group(
+    group_id: str,
+    _admin: AuthenticatedUser = Depends(require_admin),
+    manager: NotificationGroupManager = Depends(get_notification_group_manager),
+):
+    manager.delete_group(group_id)
     return {"ok": True}

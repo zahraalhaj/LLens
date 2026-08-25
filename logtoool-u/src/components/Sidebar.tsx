@@ -10,7 +10,6 @@ interface SidebarProps {
   criticalCount: number;
   userRole: 'admin' | 'member';
   ollamaAvailable: boolean;
-  engineOnline: boolean | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -19,28 +18,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   criticalCount,
   userRole,
   ollamaAvailable,
-  engineOnline,
 }) => {
-  const engineStatus =
-    engineOnline === null ? 'checking' : engineOnline ? 'ready' : 'offline';
-
-  const engineStatusStyles: Record<string, string> = {
-    checking: 'text-slate-400',
-    ready: 'text-emerald-400',
-    offline: 'text-rose-400',
-  };
-
-  const engineStatusLabel: Record<string, string> = {
-    checking: 'CHECKING',
-    ready: 'READY',
-    offline: 'OFFLINE',
-  };
-
   return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col justify-between shrink-0 min-h-screen text-slate-300">
+    <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 sticky top-0 h-screen text-slate-300">
       <div className="min-h-0 overflow-y-auto">
         <div className="p-5 border-b border-slate-800/80">
-          <Logo variant="dark" markClassName="w-8 h-6" />
+          <Logo variant="dark" markClassName="h-16 w-auto max-w-full" showWordmark={false} />
           <div className="text-[11px] text-slate-400 mt-1.5">Payment Log Analytics</div>
         </div>
 
@@ -102,29 +85,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
-      </div>
-
-      <div className="p-4 border-t border-slate-800/80 shrink-0">
-        <div className="bg-slate-950 rounded-lg p-3 border border-slate-800">
-          <div className="flex items-center justify-between text-[11px] mb-1">
-            <span className="text-slate-400">Log Engine</span>
-            <span className={`flex items-center gap-1.5 font-bold ${engineStatusStyles[engineStatus]}`}>
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  engineStatus === 'ready'
-                    ? 'bg-emerald-400 animate-pulse'
-                    : engineStatus === 'offline'
-                    ? 'bg-rose-400'
-                    : 'bg-slate-500 animate-pulse'
-                }`}
-              />
-              {engineStatusLabel[engineStatus]}
-            </span>
-          </div>
-          <div className="text-[10px] font-mono text-slate-500 truncate">
-            SQLite (local) + Ollama {ollamaAvailable ? '(online)' : '(offline)'}
-          </div>
-        </div>
       </div>
     </aside>
   );

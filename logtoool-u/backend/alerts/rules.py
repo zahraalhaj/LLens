@@ -17,11 +17,55 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.alerts.email import EmailDispatcher
 from backend.alerts.models import AlertDispatchLogModel
-from backend.alerts.rule_manager import AlertRuleManager, level_meets_threshold
+from backend.alerts.notification_groups import NotificationGroupManager
+from backend.alerts.rule_manager import SEVERITY_ORDER, AlertRuleManager, level_meets_threshold
 from backend.alerts.state import AlertDeduplicationEngine
+from backend.core.schema import LogLevel
 from backend.core.store import Base
 
 logger = logging.getLogger("logtool.alerts.rules")
+
+
+def _effective_recipients(rule: Dict[str, Any], group_by_id: Dict[str, Dict[str, Any]]) -> Optional[str]:
+    """A rule's notification_group_id, when set, takes precedence over its
+    raw `recipients` string -- lets one named group be reused across rules
+    instead of retyping the same email list on each one. Falls back
+    gracefully to `recipients` (then ultimately the server default) if the
+    referenced group was since deleted."""
+    if rule.get("notification_group_id"):
+        group = group_by_id.get(rule["notification_group_id"])
+        if group:
+            return group["emails"]
+    return rule["recipients"]
+
+
+def _highest_severity(events: List[Dict[str, Any]]) -> Optional[str]:
+    best: Optional[str] = None
+    best_idx = -1
+    for e in events:
+        try:
+            idx = SEVERITY_ORDER.index(LogLevel(e.get("level")))
+        except (ValueError, KeyError):
+            continue
+        if idx > best_idx:
+            best_idx = idx
+            best = e.get("level")
+    return best
+
+
+def _effective_dedup_window(rule: Dict[str, Any], severity: Optional[str]) -> int:
+    """A rule's dedup_windows (severity -> minutes) lets it notify more or
+    less often depending on the SEVERITY OF THE TRIGGERING EVENT, not just
+    the rule's own min_level threshold -- e.g. CRITICAL notifies every
+    time (window 0) while WARN suppresses repeats for an hour, all within
+    one rule. Falls back to the rule's flat dedup_window_minutes for any
+    severity not explicitly mapped, or when dedup_windows isn't configured
+    at all -- every rule created before this feature existed keeps
+    behaving exactly as it did."""
+    windows = rule.get("dedup_windows") or {}
+    if severity and severity in windows:
+        return windows[severity]
+    return rule["dedup_window_minutes"]
 
 
 def _extract_correlation_identifier(event: Dict[str, Any]) -> Optional[str]:
@@ -58,11 +102,13 @@ class AlertRulesProcessor:
         email_dispatcher: EmailDispatcher,
         dedup_engine: AlertDeduplicationEngine,
         rule_manager: AlertRuleManager,
+        group_manager: NotificationGroupManager,
         db_path: str,
     ):
         self.email_dispatcher = email_dispatcher
         self.dedup_engine = dedup_engine
         self.rule_manager = rule_manager
+        self.group_manager = group_manager
         self.engine = create_engine(
             f"sqlite:///{db_path}", connect_args={"check_same_thread": False, "timeout": 30.0}, echo=False
         )
@@ -88,19 +134,23 @@ class AlertRulesProcessor:
     def evaluate_batch_alerts(self, batch_id: str, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         triggered: List[Dict[str, Any]] = []
         rules = self.rule_manager.list_enabled_rules()
+        group_by_id = {g["group_id"]: g for g in self.group_manager.list_groups()}
 
         for rule in rules:
             matching = [e for e in events if _matches_rule(e, rule)]
             if not matching:
                 continue
 
+            recipients = _effective_recipients(rule, group_by_id)
+
             if rule["mode"] == "immediate":
                 for e in matching:
                     source = e.get("source_system") or "unknown"
                     comp = e.get("component") or "none"
                     msg = e.get("message") or ""
+                    window = _effective_dedup_window(rule, e.get("level"))
 
-                    if not self.dedup_engine.should_fire_alert(rule["rule_id"], source, comp, msg, rule["dedup_window_minutes"]):
+                    if not self.dedup_engine.should_fire_alert(rule["rule_id"], source, comp, msg, window):
                         continue
 
                     subject = f"{rule['name']}: {source} [{comp}]"
@@ -116,7 +166,8 @@ class AlertRulesProcessor:
                         f"Raw Log:\n{e.get('raw')}\n"
                     )
                     self._dispatch_and_log(
-                        rule, batch_id, subject, body, event_count=1, correlation_value=_extract_correlation_identifier(e)
+                        rule, batch_id, subject, body, event_count=1,
+                        recipients=recipients, correlation_value=_extract_correlation_identifier(e),
                     )
                     triggered.append({"rule": rule["name"], "mode": "immediate", "source": source, "component": comp})
 
@@ -124,8 +175,13 @@ class AlertRulesProcessor:
                 source = matching[0].get("source_system") or "batch"
                 comp = "batch_digest"
                 msg = f"{len(matching)} matching events"
+                # Most conservative choice across the batch: one CRITICAL
+                # event in an otherwise-quiet digest means don't suppress
+                # this dispatch, even if lower-severity events in the same
+                # batch would normally be suppressed.
+                window = _effective_dedup_window(rule, _highest_severity(matching))
 
-                if not self.dedup_engine.should_fire_alert(rule["rule_id"], source, comp, msg, rule["dedup_window_minutes"]):
+                if not self.dedup_engine.should_fire_alert(rule["rule_id"], source, comp, msg, window):
                     continue
 
                 sample_lines = "\n".join(
@@ -145,7 +201,7 @@ class AlertRulesProcessor:
                 # dispatch model this table doesn't have.
                 self._dispatch_and_log(
                     rule, batch_id, subject, body, event_count=len(matching),
-                    correlation_value=_extract_correlation_identifier(matching[0]),
+                    recipients=recipients, correlation_value=_extract_correlation_identifier(matching[0]),
                 )
                 triggered.append({"rule": rule["name"], "mode": "digest", "source": source, "count": len(matching)})
 
@@ -158,12 +214,13 @@ class AlertRulesProcessor:
         subject: str,
         body: str,
         event_count: int,
+        recipients: Optional[str] = None,
         correlation_value: Optional[str] = None,
     ) -> None:
         success, status_msg = self.email_dispatcher.send_alert_email(
-            subject, body, recipient_override=rule["recipients"]
+            subject, body, recipient_override=recipients
         )
-        recipient_used = rule["recipients"] or self.email_dispatcher.alert_email_to
+        recipient_used = recipients or self.email_dispatcher.alert_email_to
 
         session = self.Session()
         try:

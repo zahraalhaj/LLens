@@ -119,6 +119,16 @@ export interface AlertRule {
   mode: 'immediate' | 'digest';
   dedup_window_minutes: number;
   recipients: string | null;
+  notification_group_id: string | null;
+  dedup_windows: Record<string, number> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationGroup {
+  group_id: string;
+  name: string;
+  emails: string;
   created_at: string;
   updated_at: string;
 }

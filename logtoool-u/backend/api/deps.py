@@ -11,6 +11,7 @@ from functools import lru_cache
 from fastapi import Cookie, Depends, HTTPException, status
 
 from backend.alerts.email import EmailDispatcher
+from backend.alerts.notification_groups import NotificationGroupManager
 from backend.alerts.rule_manager import AlertRuleManager
 from backend.alerts.rules import AlertRulesProcessor
 from backend.alerts.state import AlertDeduplicationEngine
@@ -106,11 +107,17 @@ def get_alert_rule_manager() -> AlertRuleManager:
 
 
 @lru_cache
+def get_notification_group_manager() -> NotificationGroupManager:
+    return NotificationGroupManager(db_path=settings.db_path)
+
+
+@lru_cache
 def get_alert_processor() -> AlertRulesProcessor:
     return AlertRulesProcessor(
         email_dispatcher=get_email_dispatcher(),
         dedup_engine=get_dedup_engine(),
         rule_manager=get_alert_rule_manager(),
+        group_manager=get_notification_group_manager(),
         db_path=settings.db_path,
     )
 

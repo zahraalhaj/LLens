@@ -1,8 +1,16 @@
 """
 FastAPI application entry point.
 
-Run with:  PYTHONPATH=. uvicorn backend.api.main:app --reload --port 8000
-(from the repo root)
+Run with (from the repo root):
+    COOKIE_SECURE=false PYTHONPATH=. uvicorn backend.api.main:app --reload --port 8000
+
+COOKIE_SECURE=false is required for local HTTP development: the session
+cookie defaults to Secure (backend/api/config.py), which browsers silently
+refuse to store/send over plain HTTP. Without this flag, login appears to
+succeed (200 OK) but every following request -- including the forced
+password-change on a fresh account -- comes back 401, since the cookie the
+browser was handed on login was never actually kept. Omit the flag only
+when actually serving over HTTPS.
 """
 from contextlib import asynccontextmanager
 import logging

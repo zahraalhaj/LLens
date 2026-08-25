@@ -32,7 +32,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 401) {
     onUnauthorized?.();
-    throw new ApiError(401, 'Not authenticated');
+    let detail = 'Not authenticated';
+    try {
+      const body = await res.json();
+      detail = body.detail || detail;
+    } catch {
+      /* response wasn't JSON -- keep the generic fallback */
+    }
+    throw new ApiError(401, detail);
   }
 
   if (!res.ok) {

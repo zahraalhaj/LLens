@@ -1,4 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
+
+// Drop your logo file at public/logo.png (see Logo.tsx's LogoImage/Logo
+// docs below) -- served as-is at this path by Vite, no import needed.
+const LOGO_SRC = '/logo.png';
 
 // Log lines flowing into a bracket -- LLens' mark. Built as inline SVG using
 // the brand tokens directly (blue-400 accent, slate-900/white bars) rather
@@ -32,21 +36,47 @@ interface LogoProps {
   variant?: 'dark' | 'light';
   className?: string;
   markClassName?: string;
+  // Set false once your logo image already includes the "LLens" wordmark,
+  // so it isn't duplicated next to the image.
+  showWordmark?: boolean;
 }
 
 // Full lockup: mark + "LLens" wordmark. `variant="dark"` is for placement on
 // dark surfaces (sidebar); `variant="light"` for white surfaces (navbar,
 // login).
-export const Logo: React.FC<LogoProps> = ({ variant = 'light', className = '', markClassName = 'w-8 h-6' }) => {
+//
+// The mark itself prefers a real logo file at public/logo.png (see
+// LOGO_SRC above) and falls back to the original inline-SVG mark
+// automatically if that file is missing -- so this renders correctly
+// both before and after the image is dropped in, no code change needed
+// once it's added.
+export const Logo: React.FC<LogoProps> = ({
+  variant = 'light',
+  className = '',
+  markClassName = 'w-8 h-6',
+  showWordmark = true,
+}) => {
   const textColor = variant === 'dark' ? 'text-white' : 'text-slate-900';
   const barColor = variant === 'dark' ? '#FFFFFF' : '#15171A';
+  const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <LogoMark className={markClassName} barColor={barColor} accentColor="#00AEEF" />
-      <span className={`font-extrabold tracking-tight text-lg ${textColor}`}>
-        LL<span className="lowercase">ens</span>
-      </span>
+      {imageFailed ? (
+        <LogoMark className={markClassName} barColor={barColor} accentColor="#00AEEF" />
+      ) : (
+        <img
+          src={LOGO_SRC}
+          alt="Logo"
+          className={`${markClassName} object-contain`}
+          onError={() => setImageFailed(true)}
+        />
+      )}
+      {showWordmark && (
+        <span className={`font-extrabold tracking-tight text-lg ${textColor}`}>
+          LL<span className="lowercase">ens</span>
+        </span>
+      )}
     </div>
   );
 };

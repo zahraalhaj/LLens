@@ -29,12 +29,45 @@ class AlertRuleModel(Base):
     dedup_window_minutes = Column(Integer, nullable=False, default=60)
 
     # Comma-separated email addresses. Empty/null falls back to the
-    # server's default ALERT_EMAIL_TO env var.
+    # server's default ALERT_EMAIL_TO env var. Ignored at dispatch time
+    # when notification_group_id is set -- see rules.py's
+    # _effective_recipients().
     recipients = Column(String, nullable=True)
+
+    # When set, dispatch uses this NotificationGroupModel's emails instead
+    # of `recipients` above -- lets one named group be reused across rules
+    # instead of retyping the same email list on each one.
+    notification_group_id = Column(String, nullable=True)
+
+    # JSON object mapping severity name -> suppression window in minutes,
+    # e.g. {"CRITICAL": 0, "ERROR": 15, "WARN": 60} -- lets one rule notify
+    # more or less often depending on the SEVERITY OF THE TRIGGERING EVENT,
+    # not just the rule's own min_level threshold. NULL means "not
+    # configured": every severity then falls back to the flat
+    # dedup_window_minutes above, so every rule created before this field
+    # existed keeps behaving exactly as it did. See rules.py's
+    # _effective_dedup_window().
+    dedup_windows_json = Column(Text, nullable=True)
 
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     created_by_user_id = Column(String, nullable=True)
+
+
+class NotificationGroupModel(Base):
+    """A reusable named list of recipients (e.g. "Payments Team",
+    "On-Call") that an AlertRuleModel can reference by id instead of every
+    rule retyping the same email addresses -- see
+    AlertRuleModel.notification_group_id."""
+
+    __tablename__ = "notification_groups"
+
+    group_id = Column(String, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    emails = Column(String, nullable=False)  # comma-separated, same convention as AlertRuleModel.recipients
+
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
 
 
 class AlertDispatchLogModel(Base):

@@ -51,13 +51,6 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    title: 'Analytics',
-    items: [
-      { id: 'stats', label: 'Analytics & Stats', description: 'Ingestion volume, sources, error rates, and event timeline', icon: Terminal },
-      { id: 'alerts', label: 'Alerts Center', description: 'Alert rules and dispatch history', icon: BellRing },
-    ],
-  },
-  {
     title: 'Payment Rail Monitoring',
     items: [
       {
@@ -72,6 +65,13 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Service overview, dependency health, queues, investigation, and data quality',
         icon: LayoutDashboard,
       },
+    ],
+  },
+  {
+    title: 'Analytics',
+    items: [
+      { id: 'stats', label: 'Analytics & Stats', description: 'Ingestion volume, sources, error rates, and event timeline', icon: Terminal },
+      { id: 'alerts', label: 'Alerts Center', description: 'Alert rules and dispatch history', icon: BellRing },
     ],
   },
   {

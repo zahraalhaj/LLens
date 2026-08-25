@@ -7,6 +7,7 @@ from backend.core.ingest import LogIngestionEngine
 from backend.core.profiles import ProfileManager
 from backend.core.store import DatabaseManager
 from backend.alerts.email import EmailDispatcher
+from backend.alerts.notification_groups import NotificationGroupManager
 from backend.alerts.rule_manager import AlertRuleManager
 from backend.alerts.rules import AlertRulesProcessor
 from backend.alerts.state import AlertDeduplicationEngine
@@ -27,10 +28,12 @@ def service(tmp_path):
     pm = ProfileManager(profiles_dir=str(tmp_path / "profiles"))
     engine = LogIngestionEngine(db_manager=db, profile_manager=pm)
     rule_manager = AlertRuleManager(db_path=db_path)
+    group_manager = NotificationGroupManager(db_path=db_path)
     alerts = AlertRulesProcessor(
         email_dispatcher=EmailDispatcher(),
         dedup_engine=AlertDeduplicationEngine(db_path=db_path),
         rule_manager=rule_manager,
+        group_manager=group_manager,
         db_path=db_path,
     )
     return RemoteMachineService(db_path=db_path, ingestion_engine=engine, db_manager=db, alert_processor=alerts)

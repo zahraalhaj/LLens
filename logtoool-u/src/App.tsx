@@ -16,18 +16,16 @@ import { AIAnalystView } from './components/AIAnalystView';
 import { SettingsView } from './components/SettingsView';
 import { UsersView } from './components/UsersView';
 import { ControlCenterView } from './components/ControlCenterView';
-import { ConfirmProvider, useConfirm } from './components/ConfirmDialog';
+import { ConfirmProvider } from './components/ConfirmDialog';
 import { ParserProfile, LogStats, DrillThroughTarget } from './types';
 import { api } from './api';
 
 function AppShell() {
   const { user, logout } = useAuth();
-  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<TabType>('explore');
   const [profiles, setProfiles] = useState<ParserProfile[]>([]);
   const [stats, setStats] = useState<LogStats | null>(null);
   const [ollamaAvailable, setOllamaAvailable] = useState(false);
-  const [engineOnline, setEngineOnline] = useState<boolean | null>(null);
   // Lets a view OUTSIDE Analytics (e.g. AlertsView's "View Investigation"
   // button) drill through into the Investigation tab -- switches to the
   // Analytics tab and hands the target to AnalyticsView, which forwards it
@@ -37,21 +35,12 @@ function AppShell() {
     setAnalyticsTarget(target);
     setActiveTab('analytics');
   };
-  // Bumped after any operation that mutates the underlying log data
-  // (clear, load samples) and used as a remount key on the active view --
-  // each view fetches its own data on mount, so remounting is the simplest
-  // way to force every view to reflect the change without every view
-  // needing to subscribe to some shared "data changed" signal.
-  const [dataVersion, setDataVersion] = useState(0);
-
   const fetchStats = useCallback(async () => {
     try {
       const data = await api.get<LogStats>('/api/logs/stats');
       setStats(data);
-      setEngineOnline(true);
     } catch (err) {
       console.error('Failed to fetch app stats:', err);
-      setEngineOnline(false);
     }
   }, []);
 
@@ -87,33 +76,6 @@ function AppShell() {
   const distinctSources = stats ? Object.keys(stats.source_distribution) : [];
   const distinctComponents: string[] = []; // not currently exposed by /api/logs/stats
 
-  const handleLoadSamples = async () => {
-    try {
-      await api.post('/api/logs/ingest-sample');
-      await fetchStats();
-      setDataVersion((v) => v + 1);
-    } catch (err) {
-      console.error('Failed to reload sample logs:', err);
-    }
-  };
-
-  const handleClearLogs = async () => {
-    const confirmed = await confirm({
-      title: 'Clear all log data?',
-      message: 'This permanently deletes every ingested log event. This cannot be undone.',
-      confirmLabel: 'Clear logs',
-      destructive: true,
-    });
-    if (!confirmed) return;
-    try {
-      await api.delete('/api/logs/clear');
-      await fetchStats();
-      setDataVersion((v) => v + 1);
-    } catch (err) {
-      console.error('Failed to clear logs:', err);
-    }
-  };
-
   if (!user) return null; // AppRoot below guarantees user is set before rendering this
 
   const criticalCount = (stats?.severity_counts?.CRITICAL || 0) + (stats?.severity_counts?.ERROR || 0);
@@ -127,25 +89,18 @@ function AppShell() {
         criticalCount={criticalCount}
         userRole={user.role}
         ollamaAvailable={ollamaAvailable}
-        engineOnline={engineOnline}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
         <Navbar
           pageTitle={currentNavItem?.label ?? 'LLens'}
           pageDescription={currentNavItem?.description ?? ''}
-          onLoadSamples={handleLoadSamples}
-          onClearLogs={handleClearLogs}
-          totalLogs={Object.values(stats?.severity_counts || {}).reduce((a: number, b: number) => a + b, 0)}
-          ollamaAvailable={ollamaAvailable}
-          engineOnline={engineOnline}
-          canClear={user.role === 'admin'}
           user={user}
           onLogout={logout}
         />
 
         <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
-          <div key={`${activeTab}-${dataVersion}`} className="space-y-6">
+          <div key={activeTab} className="space-y-6">
             {activeTab === 'upload' && (
               <UploadView
                 profiles={profiles}
@@ -170,7 +125,7 @@ function AppShell() {
               <AnalyticsView externalTarget={analyticsTarget} onConsumeExternalTarget={() => setAnalyticsTarget(null)} />
             )}
 
-            {activeTab === 'alerts' && <AlertsView onInvestigate={investigateFromAnywhere} />}
+            {activeTab === 'alerts' && <AlertsView onInvestigate={investigateFromAnywhere} isAdmin={user.role === 'admin'} />}
 
             {activeTab === 'chat' && <ChatView ollamaAvailable={ollamaAvailable} />}
 

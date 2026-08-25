@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cpu, KeyRound } from 'lucide-react';
+import { Cpu, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 export const ChangePassword: React.FC = () => {
@@ -7,8 +7,10 @@ export const ChangePassword: React.FC = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const fieldType = showPasswords ? 'text' : 'password';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +65,7 @@ export const ChangePassword: React.FC = () => {
               </label>
               <input
                 id="current"
-                type="password"
+                type={fieldType}
                 autoComplete="current-password"
                 autoFocus
                 value={currentPassword}
@@ -79,7 +81,7 @@ export const ChangePassword: React.FC = () => {
               </label>
               <input
                 id="newpw"
-                type="password"
+                type={fieldType}
                 autoComplete="new-password"
                 minLength={8}
                 value={newPassword}
@@ -95,7 +97,7 @@ export const ChangePassword: React.FC = () => {
               </label>
               <input
                 id="confirmpw"
-                type="password"
+                type={fieldType}
                 autoComplete="new-password"
                 minLength={8}
                 value={confirmPassword}
@@ -104,6 +106,15 @@ export const ChangePassword: React.FC = () => {
                 required
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPasswords((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 cursor-pointer -mt-1"
+            >
+              {showPasswords ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {showPasswords ? 'Hide passwords' : 'Show passwords'}
+            </button>
 
             {(localError || error) && (
               <div className="text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">

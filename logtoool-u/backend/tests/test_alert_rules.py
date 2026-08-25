@@ -3,6 +3,7 @@ import time
 import pytest
 
 from backend.alerts.email import EmailDispatcher
+from backend.alerts.notification_groups import NotificationGroupManager
 from backend.alerts.rule_manager import AlertRuleManager, RuleNameTakenError, RuleNotFoundError, level_meets_threshold
 from backend.alerts.rules import AlertRulesProcessor
 from backend.alerts.state import AlertDeduplicationEngine
@@ -14,12 +15,18 @@ def rule_manager(tmp_path):
 
 
 @pytest.fixture
-def processor(tmp_path, rule_manager):
+def group_manager(tmp_path):
+    return NotificationGroupManager(db_path=str(tmp_path / "test.db"))
+
+
+@pytest.fixture
+def processor(tmp_path, rule_manager, group_manager):
     db_path = str(tmp_path / "test.db")
     return AlertRulesProcessor(
         email_dispatcher=EmailDispatcher(),
         dedup_engine=AlertDeduplicationEngine(db_path=db_path),
         rule_manager=rule_manager,
+        group_manager=group_manager,
         db_path=db_path,
     )
 
@@ -199,7 +206,7 @@ def test_dedup_does_not_suppress_across_different_rules(rule_manager, processor)
     assert len(triggered) == 2  # both rules fire independently, not deduped against each other
 
 
-def test_dedup_persists_across_new_engine_instance(tmp_path, rule_manager, processor):
+def test_dedup_persists_across_new_engine_instance(tmp_path, rule_manager, group_manager, processor):
     """The whole point of moving off in-memory dedup: a fresh instance
     (simulating a process restart) must still remember prior suppression."""
     for r in rule_manager.list_rules():
@@ -212,7 +219,8 @@ def test_dedup_persists_across_new_engine_instance(tmp_path, rule_manager, proce
     db_path = str(tmp_path / "test.db")
     fresh_dedup = AlertDeduplicationEngine(db_path=db_path)  # new instance, same DB file
     fresh_processor = AlertRulesProcessor(
-        email_dispatcher=EmailDispatcher(), dedup_engine=fresh_dedup, rule_manager=rule_manager, db_path=db_path
+        email_dispatcher=EmailDispatcher(), dedup_engine=fresh_dedup, rule_manager=rule_manager,
+        group_manager=group_manager, db_path=db_path,
     )
     triggered = fresh_processor.evaluate_batch_alerts("batch-2", [event])
     assert triggered == []  # still suppressed, even though the engine object is brand new
@@ -300,3 +308,161 @@ def test_manual_dispatch_leaves_correlation_fields_none(rule_manager, processor)
     entry = processor.get_dispatch_history()["entries"][0]
     assert entry["correlation_field"] is None
     assert entry["correlation_value"] is None
+
+
+# ---------------------------------------------------------------------------
+# Notification groups: reusable named recipient lists (dedup_windows +
+# notification_group_id extend AlertRuleModel -- see plan/models.py)
+# ---------------------------------------------------------------------------
+
+
+def test_group_assigned_rule_uses_group_emails(rule_manager, group_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    group = group_manager.create_group("Payments Team", "payments@example.com,oncall@example.com")
+    rule_manager.create_rule(
+        name="critical-now", min_level="CRITICAL", mode="immediate",
+        notification_group_id=group["group_id"],
+    )
+
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL")])
+    entry = processor.get_dispatch_history()["entries"][0]
+    assert entry["recipient"] == "payments@example.com,oncall@example.com"
+
+
+def test_rule_without_group_falls_back_to_raw_recipients(rule_manager, group_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(
+        name="critical-now", min_level="CRITICAL", mode="immediate", recipients="direct@example.com",
+    )
+
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL")])
+    entry = processor.get_dispatch_history()["entries"][0]
+    assert entry["recipient"] == "direct@example.com"
+
+
+def test_deleted_group_falls_back_to_raw_recipients(rule_manager, group_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    group = group_manager.create_group("Temp Group", "temp@example.com")
+    rule = rule_manager.create_rule(
+        name="critical-now", min_level="CRITICAL", mode="immediate",
+        notification_group_id=group["group_id"], recipients="fallback@example.com",
+    )
+    group_manager.delete_group(group["group_id"])
+
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL")])
+    entry = processor.get_dispatch_history()["entries"][0]
+    assert entry["recipient"] == "fallback@example.com"
+
+
+# ---------------------------------------------------------------------------
+# Per-severity dedup windows
+# ---------------------------------------------------------------------------
+
+
+def test_critical_severity_window_zero_never_suppresses(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(
+        name="warn-and-up", min_level="WARN", mode="immediate", dedup_window_minutes=60,
+        dedup_windows={"CRITICAL": 0},
+    )
+
+    first = processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL", message="same signature")])
+    second = processor.evaluate_batch_alerts("batch-2", [make_event(level="CRITICAL", message="same signature")])
+    assert len(first) == 1
+    assert len(second) == 1  # window 0 for CRITICAL -- never suppressed, unlike the flat 60-minute default
+
+
+def test_unmapped_severity_falls_back_to_flat_window(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(
+        name="warn-and-up", min_level="WARN", mode="immediate", dedup_window_minutes=60,
+        dedup_windows={"CRITICAL": 0},  # WARN intentionally left unmapped
+    )
+
+    first = processor.evaluate_batch_alerts("batch-1", [make_event(level="WARN", message="same signature")])
+    second = processor.evaluate_batch_alerts("batch-2", [make_event(level="WARN", message="same signature")])
+    assert len(first) == 1
+    assert len(second) == 0  # WARN isn't in dedup_windows -- falls back to the flat 60-minute default, suppressed
+
+
+def test_rule_without_dedup_windows_behaves_exactly_as_before(rule_manager, processor):
+    """No dedup_windows configured at all -- every severity uses the flat
+    dedup_window_minutes, identical to pre-feature behavior."""
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="critical-now", min_level="CRITICAL", mode="immediate", dedup_window_minutes=60)
+
+    first = processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL", message="same signature")])
+    second = processor.evaluate_batch_alerts("batch-2", [make_event(level="CRITICAL", message="same signature")])
+    assert len(first) == 1
+    assert len(second) == 0  # suppressed by the flat 60-minute window, same as before this feature existed
+
+
+def test_digest_mode_uses_highest_severity_window_among_batched_events(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(
+        name="warn-digest", min_level="WARN", mode="digest", dedup_window_minutes=60,
+        dedup_windows={"CRITICAL": 0},
+    )
+
+    # First batch: WARN only -- establishes the dedup signature at the flat window.
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="WARN", source="svc-a", component="db")])
+    # Second batch: same (source, component) signature, but this time
+    # includes a CRITICAL event -- the digest as a whole should use the
+    # CRITICAL window (0) and NOT be suppressed by the WARN-established window.
+    triggered = processor.evaluate_batch_alerts(
+        "batch-2",
+        [
+            make_event(level="WARN", source="svc-a", component="db", line_no=1),
+            make_event(level="CRITICAL", source="svc-a", component="db", line_no=2),
+        ],
+    )
+    assert len(triggered) == 1
+
+
+def test_migration_adds_notification_columns_to_pre_existing_table(tmp_path):
+    """A database created before notification_group_id/dedup_windows_json
+    existed must still work -- AlertRuleManager.__init__'s
+    _ensure_notification_columns() has to ALTER TABLE it in place rather
+    than assume Base.metadata.create_all() alone is enough (that only
+    creates missing TABLES, never missing COLUMNS on ones that exist)."""
+    from sqlalchemy import create_engine, text
+
+    db_path = str(tmp_path / "old_schema.db")
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE alert_rules (
+                    rule_id VARCHAR PRIMARY KEY,
+                    name VARCHAR NOT NULL UNIQUE,
+                    enabled INTEGER NOT NULL,
+                    min_level VARCHAR NOT NULL,
+                    source_system_filter VARCHAR,
+                    component_filter VARCHAR,
+                    message_contains VARCHAR,
+                    mode VARCHAR NOT NULL,
+                    dedup_window_minutes INTEGER NOT NULL,
+                    recipients VARCHAR,
+                    created_at VARCHAR NOT NULL,
+                    updated_at VARCHAR NOT NULL,
+                    created_by_user_id VARCHAR
+                )
+                """
+            )
+        )
+        conn.commit()
+    engine.dispose()
+
+    manager = AlertRuleManager(db_path=db_path)  # must not raise
+    rule = manager.create_rule(name="post-migration", min_level="ERROR", mode="immediate")
+    assert rule["notification_group_id"] is None
+    assert rule["dedup_windows"] is None
+    assert any(r["name"] == "post-migration" for r in manager.list_rules())
