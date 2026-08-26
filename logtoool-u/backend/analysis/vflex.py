@@ -23,6 +23,7 @@ from backend.analysis.normalized_schema import (
     mask_email,
     mask_mobile,
 )
+from backend.core.currency import resolve_currency_code
 
 DEFAULT_SOURCE_SYSTEM = "vflex_transaction_log"
 
@@ -70,6 +71,7 @@ def compute_vflex_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     by_status: Counter = Counter()
     by_bank_operation: Counter = Counter()
     by_channel: Counter = Counter()
+    by_currency: Counter = Counter()
     by_merchant: Counter = Counter()
     otp_processed_count = 0
     bank_api_success_count = 0
@@ -80,6 +82,7 @@ def compute_vflex_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         by_status[tx.get("status") or tx.get("integrity_status") or "UNKNOWN"] += 1
         by_bank_operation[(tx.get("bank_api") or {}).get("operation") or "UNKNOWN"] += 1
         by_channel[(tx.get("otp") or {}).get("channel") or "UNKNOWN"] += 1
+        by_currency[resolve_currency_code((tx.get("transaction") or {}).get("currency")) or "UNKNOWN"] += 1
         by_merchant[(tx.get("merchant") or {}).get("name") or "UNKNOWN"] += 1
         if (tx.get("otp") or {}).get("processed_successfully"):
             otp_processed_count += 1
@@ -121,6 +124,7 @@ def compute_vflex_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "by_status": dict(by_status.most_common()),
         "by_bank_operation": dict(by_bank_operation.most_common()),
         "by_channel": dict(by_channel.most_common()),
+        "by_currency": dict(by_currency.most_common()),
         "top_merchants": dict(by_merchant.most_common(_TOP_MERCHANTS_LIMIT)),
         "otp_processed_count": otp_processed_count,
         "bank_api_success_count": bank_api_success_count,
@@ -222,7 +226,7 @@ def normalize_vflex_event(event: Dict[str, Any]) -> NormalizedEvent:
         merchant_name=merchant.get("name"),
         merchant_id=None,
         amount=transaction_info.get("amount"),
-        currency=transaction_info.get("currency"),
+        currency=resolve_currency_code(transaction_info.get("currency")),
         card_last4=extract_card_last4(payment.get("last4_pan"), payment.get("masked_card")),
         channel=otp.get("channel"),
         masked_mobile=mask_mobile(customer.get("mobile")),

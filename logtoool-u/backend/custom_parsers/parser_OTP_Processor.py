@@ -15,6 +15,8 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
+from backend.core.currency import resolve_transaction_currency
+
 TIMESTAMP_RE = re.compile(r"\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M")
 
 
@@ -768,7 +770,9 @@ def parse_log_file(log_file_path, output_json_path=None):
         if failure_reason:
             details["parse_error"] = failure_reason
         if tracker and tracker in tracker_context:
-            details["record"] = tracker_context[tracker]
+            record_context = dict(tracker_context[tracker])
+            record_context["transaction"] = resolve_transaction_currency(record_context.get("transaction"))
+            details["record"] = record_context
 
         out_records.append(
             {

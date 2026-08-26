@@ -3,7 +3,7 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
 } from 'recharts';
 import {
-  KeyRound, RefreshCw, Info, Layers, Store, Building2, AlertOctagon, ShieldCheck, ShieldAlert,
+  KeyRound, RefreshCw, Info, Layers, Store, Building2, AlertOctagon, ShieldCheck, ShieldAlert, Coins,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { OtpProcessorSummary } from '../types';
@@ -115,6 +115,7 @@ export const OtpProcessorView: React.FC = () => {
 
   const queueData = toChartData(report.by_queue);
   const orgData = toChartData(report.by_org);
+  const currencyData = toChartData(report.by_currency);
   const merchantData = toChartData(report.top_merchants);
   const failedReasonData = toChartData(report.failed_events?.reason_counts);
   const failedItems = report.failed_events?.items || [];
@@ -217,6 +218,40 @@ export const OtpProcessorView: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
+        <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+          <Coins className="w-4 h-4 text-emerald-600" />
+          By Currency
+        </h3>
+        {currencyData.length === 0 ? (
+          <div className="h-64 flex items-center justify-center text-xs text-slate-400 italic">No currency data in this window.</div>
+        ) : (
+          <div className="h-64 w-full max-w-md mx-auto">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={currencyData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={3}
+                  label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
+                >
+                  {currencyData.map((entry, i) => (
+                    <Cell key={entry.name} fill={PALETTE[i % PALETTE.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">

@@ -4,6 +4,7 @@ python-dateutil>=2.8.2
 sqlalchemy>=2.0.0
 pyyaml>=6.0
 requests>=2.31.0
+pycountry>=24.6.1   # ISO 4217 currency code resolution (numeric -> alpha-3)
 
 # Auth
 bcrypt>=4.1.0

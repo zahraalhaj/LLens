@@ -5,6 +5,8 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
+from backend.core.currency import resolve_transaction_currency
+
 # ============================================================
 # Core patterns
 # ============================================================
@@ -1357,7 +1359,7 @@ def parse_log_file(log_file_path, output_json_path=None):
                 "authentication": flow.get("authentication"),
                 "customer": flow.get("customer"),
                 "merchant": flow.get("merchant"),
-                "transaction": flow.get("transaction"),
+                "transaction": resolve_transaction_currency(flow.get("transaction")),
                 "payment": flow.get("payment"),
                 "oob": flow.get("oob"),
                 "integrity_status": flow.get("integrity_status"),

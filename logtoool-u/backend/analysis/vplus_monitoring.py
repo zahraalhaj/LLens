@@ -27,6 +27,7 @@ from backend.analysis.normalized_schema import (
     mask_email,
     mask_mobile,
 )
+from backend.core.currency import resolve_currency_code
 
 VPLUS_COMPONENTS = {"vplus_input", "vplus_response", "netcetera_response"}
 
@@ -417,6 +418,7 @@ def compute_transaction_breakdown(events: List[Dict[str, Any]]) -> Dict[str, Any
 
     issuer_counts: Counter = Counter()
     status_counts: Counter = Counter()
+    currency_counts: Counter = Counter()
     total_transactions = 0
 
     for corr_id, tx_events in tx_groups.items():
@@ -436,6 +438,8 @@ def compute_transaction_breakdown(events: List[Dict[str, Any]]) -> Dict[str, Any
             status = "OTP_PROCESSED"
         status_counts[status or "UNKNOWN"] += 1
 
+        currency_counts[resolve_currency_code((tx.get("transaction_info") or {}).get("currency")) or "UNKNOWN"] += 1
+
     if total_transactions == 0:
         return {"status": "no_data", "message": "No resolved transactions found in the analyzed window."}
 
@@ -444,6 +448,7 @@ def compute_transaction_breakdown(events: List[Dict[str, Any]]) -> Dict[str, Any
         "total_transactions": total_transactions,
         "issuer_counts": dict(issuer_counts.most_common()),
         "status_counts": dict(status_counts.most_common()),
+        "currency_counts": dict(currency_counts.most_common()),
     }
 
 
@@ -625,7 +630,7 @@ def normalize_netcetera_event(event: Dict[str, Any]) -> NormalizedEvent:
         merchant_name=merchant.get("name"),
         merchant_id=merchant.get("id"),
         amount=transaction_info.get("amount"),
-        currency=transaction_info.get("currency"),
+        currency=resolve_currency_code(transaction_info.get("currency")),
         card_last4=None,  # not exposed at this layer -- see docstring above
         channel=channel,
         masked_mobile=mask_mobile(customer.get("mobile")),

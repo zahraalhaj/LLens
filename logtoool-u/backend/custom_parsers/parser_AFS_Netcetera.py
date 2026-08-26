@@ -15,6 +15,8 @@ from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
 
+from backend.core.currency import resolve_transaction_currency
+
 LOG_RE = re.compile(
     r"^(?P<timestamp>\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M)\s+"
     r"Log Tracker No:\s+(?P<tracker>[A-Z]{2}\d+)\s+=>\s+(?P<message>.*)$"
@@ -562,7 +564,7 @@ def parse_log_file(log_file_path, output_json_path=None):
                 "issuer_id": tx_context["issuer_id"],
                 "processor_id": tx_context["processor_id"],
                 "merchant": tx_context["merchant"],
-                "transaction_info": tx_context["transaction"],
+                "transaction_info": resolve_transaction_currency(tx_context["transaction"]),
                 "customer": tx_context["customer"],
                 "derived": tx_context["derived"],
                 "stepup_status": tx_context["stepup"]["status"],

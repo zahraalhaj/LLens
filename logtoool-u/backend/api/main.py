@@ -28,6 +28,7 @@ from backend.api.routes import (
     analytics,
     auth,
     cardinal,
+    currency_map,
     debit_portal,
     logs,
     machines,
@@ -141,6 +142,7 @@ app.include_router(otp_processor.router)
 app.include_router(debit_portal.router)
 app.include_router(cardinal.router)
 app.include_router(vflex.router)
+app.include_router(currency_map.router)
 app.include_router(analytics.router)
 app.include_router(ai_analyst.router)
 app.include_router(settings_routes.router)

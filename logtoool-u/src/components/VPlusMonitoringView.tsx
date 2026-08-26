@@ -4,7 +4,7 @@ import {
 } from 'recharts';
 import {
   Activity, RefreshCw, AlertTriangle, CheckCircle2, XCircle, Clock,
-  MessageSquareText, Search, ShieldAlert, Info, TrendingDown, Copy, Check, Building2, Layers,
+  MessageSquareText, Search, ShieldAlert, Info, TrendingDown, Copy, Check, Building2, Layers, Coins,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { VPlusFullReport } from '../types';
@@ -111,6 +111,7 @@ export const VPlusMonitoringView: React.FC = () => {
   const { availability: avail, response_times: rt, sms_analysis: sms, investigation_summary: inv, transaction_breakdown: txBreakdown } = report;
   const statusCountsData = toChartData(txBreakdown?.status_counts);
   const issuerCountsData = toChartData(txBreakdown?.issuer_counts);
+  const currencyCountsData = toChartData(txBreakdown?.currency_counts);
 
   const statusColor =
     avail.status === 'healthy' ? 'text-emerald-600' : avail.status === 'down' ? 'text-rose-600' : 'text-slate-400';
@@ -402,6 +403,42 @@ export const VPlusMonitoringView: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {txBreakdown?.status === 'ok' && (
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-2xs">
+          <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <Coins className="w-4 h-4 text-emerald-600" />
+            Netcetera Transactions by Currency
+          </h3>
+          {currencyCountsData.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-xs text-slate-400 italic">No currency data in this window.</div>
+          ) : (
+            <div className="h-64 w-full max-w-md mx-auto">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={currencyCountsData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={3}
+                    label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
+                  >
+                    {currencyCountsData.map((entry, i) => (
+                      <Cell key={entry.name} fill={PALETTE[i % PALETTE.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
       )}
 

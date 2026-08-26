@@ -23,6 +23,7 @@ from backend.analysis.normalized_schema import (
     mask_email,
     mask_mobile,
 )
+from backend.core.currency import resolve_currency_code
 
 DEFAULT_SOURCE_SYSTEM = "cardinal_stepup_oob_log"
 
@@ -68,6 +69,7 @@ def compute_cardinal_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     by_issuer: Counter = Counter()
     by_status: Counter = Counter()
     by_bank_org: Counter = Counter()
+    by_currency: Counter = Counter()
     by_merchant: Counter = Counter()
     oob_status_counts: Counter = Counter()
     otp_processed_count = 0
@@ -78,6 +80,7 @@ def compute_cardinal_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         auth = flow.get("authentication") or {}
         by_status[auth.get("status") or flow.get("integrity_status") or "UNKNOWN"] += 1
         by_bank_org[flow.get("bank_org") or "UNKNOWN"] += 1
+        by_currency[resolve_currency_code((flow.get("transaction") or {}).get("currency")) or "UNKNOWN"] += 1
         by_merchant[(flow.get("merchant") or {}).get("name") or "UNKNOWN"] += 1
         for status_value in (flow.get("oob") or {}).get("status_history") or []:
             oob_status_counts[status_value] += 1
@@ -118,6 +121,7 @@ def compute_cardinal_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "by_issuer": dict(by_issuer.most_common()),
         "by_status": dict(by_status.most_common()),
         "by_bank_org": dict(by_bank_org.most_common()),
+        "by_currency": dict(by_currency.most_common()),
         "oob_status_counts": dict(oob_status_counts.most_common()),
         "top_merchants": dict(by_merchant.most_common(_TOP_MERCHANTS_LIMIT)),
         "otp_processed_count": otp_processed_count,
@@ -231,7 +235,7 @@ def normalize_cardinal_event(event: Dict[str, Any]) -> NormalizedEvent:
         merchant_name=merchant.get("name"),
         merchant_id=merchant.get("id"),
         amount=transaction.get("amount"),
-        currency=transaction.get("currency"),
+        currency=resolve_currency_code(transaction.get("currency")),
         card_last4=extract_card_last4(payment.get("card_number")),
         channel=None,
         masked_mobile=mask_mobile(customer.get("mobile")),

@@ -293,6 +293,7 @@ export interface VPlusTransactionBreakdown {
   total_transactions?: number;
   issuer_counts?: Record<string, number>;
   status_counts?: Record<string, number>;
+  currency_counts?: Record<string, number>;
 }
 
 export interface VPlusFullReport {
@@ -386,6 +387,7 @@ export interface CardinalSummary {
   by_issuer?: Record<string, number>;
   by_status?: Record<string, number>;
   by_bank_org?: Record<string, number>;
+  by_currency?: Record<string, number>;
   oob_status_counts?: Record<string, number>;
   top_merchants?: Record<string, number>;
   available_merchants?: string[];
@@ -708,12 +710,35 @@ export interface VFlexSummary {
   by_status?: Record<string, number>;
   by_bank_operation?: Record<string, number>;
   by_channel?: Record<string, number>;
+  by_currency?: Record<string, number>;
   top_merchants?: Record<string, number>;
   available_merchants?: string[];
   otp_processed_count?: number;
   bank_api_success_count?: number;
   checks_needed_count?: number;
   failed_events?: GenericFailedEventsReport;
+}
+
+// -- Global currency map (backend/analysis/currency_map.py) ----------------
+// Cross-source: combines Cardinal/VFlex/Debit Portal/OTP Processor/AFS
+// Netcetera into one currency-by-geography view, unlike every summary type
+// above (each scoped to its own single log source).
+
+export interface CurrencyGeoPoint {
+  currency: string;
+  country: string;
+  lat: number;
+  lng: number;
+  count: number;
+}
+
+export interface CurrencyMapSummary {
+  status: 'ok' | 'no_data';
+  message?: string;
+  total_transactions?: number;
+  distinct_currencies?: number;
+  points?: CurrencyGeoPoint[];
+  unmapped_currencies?: Record<string, number>;
 }
 
 // ---------------------------------------------------------------------------

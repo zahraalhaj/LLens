@@ -26,6 +26,7 @@ from backend.analysis.normalized_schema import (
     mask_email,
     mask_mobile,
 )
+from backend.core.currency import resolve_currency_code
 
 # Matches parser_OTP_Processor.py's DEFAULT_SOURCE_SYSTEM -- kept here too
 # (not imported from the parser module) so this analysis module has no
@@ -85,7 +86,7 @@ def compute_otp_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     for record in records_by_tracker.values():
         by_org[record.get("org") or "UNKNOWN"] += 1
         by_queue[record.get("queue") or "UNKNOWN"] += 1
-        by_currency[(record.get("transaction") or {}).get("currency") or "UNKNOWN"] += 1
+        by_currency[resolve_currency_code((record.get("transaction") or {}).get("currency")) or "UNKNOWN"] += 1
         by_merchant[record.get("merchant") or "UNKNOWN"] += 1
         if record.get("otp_processed"):
             otp_processed_count += 1
@@ -213,7 +214,7 @@ def normalize_otp_event(event: Dict[str, Any]) -> NormalizedEvent:
         merchant_name=record.get("merchant"),
         merchant_id=merchant_details.get("id"),
         amount=transaction_info.get("amount"),
-        currency=transaction_info.get("currency"),
+        currency=resolve_currency_code(transaction_info.get("currency")),
         card_last4=extract_card_last4(record.get("masked_card")),
         channel=channel,
         masked_mobile=mask_mobile(mobile),

@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
-import { Activity, KeyRound, CreditCard, ShieldQuestion, Smartphone, type LucideIcon } from 'lucide-react';
+import React, { Suspense, lazy, useState } from 'react';
+import { Activity, KeyRound, CreditCard, ShieldQuestion, Smartphone, Globe2, type LucideIcon } from 'lucide-react';
 import { VPlusMonitoringView } from './VPlusMonitoringView';
 import { OtpProcessorView } from './OtpProcessorView';
 import { DebitPortalView } from './DebitPortalView';
 import { CardinalView } from './CardinalView';
 import { VFlexView } from './VFlexView';
 
-type PaymentTab = 'vplus' | 'otp-processor' | 'debit-portal' | 'cardinal' | 'vflex';
+// Lazy-loaded: pulls in three.js/globe.gl (~700kB), which every other tab
+// on this page has no use for -- code-split so it's only fetched when
+// someone actually opens the Currency Globe tab.
+const CurrencyGlobeView = lazy(() => import('./CurrencyGlobeView').then((m) => ({ default: m.CurrencyGlobeView })));
+
+type PaymentTab = 'vplus' | 'otp-processor' | 'debit-portal' | 'cardinal' | 'vflex' | 'currency-globe';
 
 const TABS: { id: PaymentTab; label: string; icon: LucideIcon }[] = [
   { id: 'vplus', label: 'V+ Monitoring', icon: Activity },
@@ -14,6 +19,7 @@ const TABS: { id: PaymentTab; label: string; icon: LucideIcon }[] = [
   { id: 'debit-portal', label: 'Debit Portal', icon: CreditCard },
   { id: 'cardinal', label: 'Cardinal', icon: ShieldQuestion },
   { id: 'vflex', label: 'VFlex', icon: Smartphone },
+  { id: 'currency-globe', label: 'Currency Globe', icon: Globe2 },
 ];
 
 export const PaymentMonitoringView: React.FC = () => {
@@ -45,6 +51,18 @@ export const PaymentMonitoringView: React.FC = () => {
       {tab === 'debit-portal' && <DebitPortalView />}
       {tab === 'cardinal' && <CardinalView />}
       {tab === 'vflex' && <VFlexView />}
+      {tab === 'currency-globe' && (
+        <Suspense
+          fallback={
+            <div className="flex flex-col items-center justify-center h-96 text-slate-400">
+              <Globe2 className="w-10 h-10 animate-pulse text-blue-500 mb-3" />
+              <p className="text-sm font-medium">Loading globe renderer…</p>
+            </div>
+          }
+        >
+          <CurrencyGlobeView />
+        </Suspense>
+      )}
     </div>
   );
 };

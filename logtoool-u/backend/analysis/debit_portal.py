@@ -23,6 +23,7 @@ from backend.analysis.normalized_schema import (
     mask_email,
     mask_mobile,
 )
+from backend.core.currency import resolve_currency_code
 
 DEFAULT_SOURCE_SYSTEM = "debit_portal_log"
 
@@ -77,7 +78,7 @@ def compute_debit_portal_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]
     for tx in transactions.values():
         by_issuer[tx.get("issuer_id") or "UNKNOWN"] += 1
         by_status[tx.get("status") or tx.get("integrity_status") or "UNKNOWN"] += 1
-        by_currency[(tx.get("transaction") or {}).get("currency") or "UNKNOWN"] += 1
+        by_currency[resolve_currency_code((tx.get("transaction") or {}).get("currency")) or "UNKNOWN"] += 1
         by_merchant[(tx.get("merchant") or {}).get("name") or "UNKNOWN"] += 1
         if tx.get("otp_processed"):
             otp_processed_count += 1
@@ -213,7 +214,7 @@ def normalize_debit_portal_event(event: Dict[str, Any]) -> NormalizedEvent:
         merchant_name=merchant.get("name"),
         merchant_id=merchant.get("id"),
         amount=transaction_info.get("amount"),
-        currency=transaction_info.get("currency"),
+        currency=resolve_currency_code(transaction_info.get("currency")),
         card_last4=extract_card_last4(parsed.get("masked_card")),
         channel=None,
         masked_mobile=mask_mobile(mobile),
