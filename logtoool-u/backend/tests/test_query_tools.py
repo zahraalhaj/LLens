@@ -223,6 +223,58 @@ def test_correlation_quality_no_conflicts_has_no_evidence(db):
     assert result_has_no_evidence("correlation_quality", result)
 
 
+def _seed_conflicting_flows(db):
+    # Two flows sharing tracker SU1 with conflicting transaction_ids -- same
+    # conflict-construction shape used in test_correlate.py/test_pipeline.py.
+    _insert(db, "cc1", "2026-08-22T09:00:00Z", "cardinal_stepup_oob_log", "vplus_input", "TXN1",
+            {"flow": {"transaction_id": "TXN1", "trackers": ["SU1"]}})
+    _insert(db, "cc2", "2026-08-22T09:00:01Z", "cardinal_stepup_oob_log", "vplus_input", "TXN1",
+            {"flow": {"transaction_id": "TXN1", "trackers": ["SU1"]}}, line_no=2)
+    _insert(db, "cc3", "2026-08-22T09:05:00Z", "cardinal_stepup_oob_log", "vplus_input", "TXN2",
+            {"flow": {"transaction_id": "TXN2", "trackers": ["SU1"]}}, line_no=3)
+    _insert(db, "cc4", "2026-08-22T09:05:01Z", "cardinal_stepup_oob_log", "vplus_input", "TXN2",
+            {"flow": {"transaction_id": "TXN2", "trackers": ["SU1"]}}, line_no=4)
+
+
+def test_correlation_quality_includes_conflicting_identifier_detail(db):
+    _seed_conflicting_flows(db)
+    bundle = _bundle(db)
+    result = correlation_quality_tool(bundle)
+    assert result["conflict_count"] == 1
+    conflict = result["conflicts"][0]
+    assert conflict["conflicting_identifiers"] == [
+        {"key_type": "transaction_id", "flow_a_value": "TXN1", "flow_b_value": "TXN2"}
+    ]
+    assert conflict["source_event_ids_a"] == ["cc1", "cc2"]
+    assert conflict["source_event_ids_b"] == ["cc3", "cc4"]
+
+
+def test_correlation_quality_filters_by_flow_id(db):
+    _seed_conflicting_flows(db)
+    bundle = _bundle(db)
+    full_result = correlation_quality_tool(bundle)
+    flow_a_id, flow_b_id = full_result["conflicts"][0]["affected_flow_ids"]
+
+    result = correlation_quality_tool(bundle, flow_id=flow_a_id)
+    assert result["flow_id"] == flow_a_id
+    assert result["conflict_count"] == 1
+    assert flow_a_id in result["conflicts"][0]["affected_flow_ids"]
+
+    # The conflict touches both ends -- either flow_id surfaces it.
+    result_b = correlation_quality_tool(bundle, flow_id=flow_b_id)
+    assert result_b["conflict_count"] == 1
+
+
+def test_correlation_quality_flow_id_with_no_matches_has_no_evidence(db):
+    _seed_conflicting_flows(db)
+    bundle = _bundle(db)
+    result = correlation_quality_tool(bundle, flow_id="flow:transaction_id:UNRELATED:deadbeef")
+    assert result["conflict_count"] == 0
+    assert result["candidate_link_count"] == 0
+    assert result["low_confidence_hint_count"] == 0
+    assert result_has_no_evidence("correlation_quality", result)
+
+
 # ---------------------------------------------------------------------------
 # issuer_failure_rates
 # ---------------------------------------------------------------------------

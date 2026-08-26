@@ -267,10 +267,11 @@ class AIAnalystAssistant:
 
         if tool_name == "correlation_quality" and tool_result.get("conflict_count", 0) > 0:
             if not any("CORRELATION CONFLICT" in e.text for e in evidence):
+                scope = f"involving flow '{tool_result['flow_id']}'" if tool_result.get("flow_id") else "in the analyzed window"
                 evidence.append(
                     AnalystStatement(
                         evidence_type=EvidenceType.OBSERVED_FACT,
-                        text=f"CORRELATION CONFLICT: {tool_result['conflict_count']} conflicting identifier(s) found in the analyzed window.",
+                        text=f"CORRELATION CONFLICT: {tool_result['conflict_count']} conflicting identifier(s) found {scope}.",
                     )
                 )
 

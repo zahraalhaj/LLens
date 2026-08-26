@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, ApiError, setUnauthorizedHandler } from '../api';
 import { User } from '../types';
+import { CHAT_HISTORY_STORAGE_KEY } from '../components/ChatView';
 
 interface AuthContextValue {
   user: User | null;
@@ -50,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await api.post('/api/auth/logout');
     } finally {
       setUser(null);
+      sessionStorage.removeItem(CHAT_HISTORY_STORAGE_KEY);
     }
   }, []);
 

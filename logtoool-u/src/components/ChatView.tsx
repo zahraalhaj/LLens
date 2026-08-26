@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MessageSquareCode, Sparkles, Send, Database, AlertTriangle } from 'lucide-react';
 import { ChatMessage } from '../types';
 import { api, ApiError } from '../api';
@@ -7,15 +7,44 @@ interface ChatViewProps {
   ollamaAvailable: boolean;
 }
 
+// sessionStorage (not React state alone) so history survives switching away
+// from this tab and back -- App.tsx only renders ChatView while it's the
+// active tab, so plain useState would reset on every unmount/remount.
+// sessionStorage itself already clears when the browser tab/session ends
+// ("till the session dies"); AuthContext.logout() also clears it explicitly
+// so one user's chat history can't leak into the next login on a shared
+// machine within the same tab.
+export const CHAT_HISTORY_STORAGE_KEY = 'llens_chat_history';
+
+const welcomeMessage: ChatMessage = {
+  id: 'm-1',
+  sender: 'assistant',
+  text: 'Ask me questions about your ingested logs in plain English -- I\'ll generate SQL, run it against your data (read-only), and summarize the results.',
+  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+};
+
+function loadStoredMessages(): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(CHAT_HISTORY_STORAGE_KEY);
+    if (!raw) return [welcomeMessage];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [welcomeMessage];
+  } catch {
+    return [welcomeMessage];
+  }
+}
+
 export const ChatView: React.FC<ChatViewProps> = ({ ollamaAvailable }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'm-1',
-      sender: 'assistant',
-      text: 'Ask me questions about your ingested logs in plain English -- I\'ll generate SQL, run it against your data (read-only), and summarize the results.',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(loadStoredMessages);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // Storage full/unavailable (e.g. private browsing) -- history just
+      // won't persist across tab switches this session, not worth surfacing.
+    }
+  }, [messages]);
 
   const [inputQuery, setInputQuery] = useState<string>('');
   const [isQuerying, setIsQuerying] = useState<boolean>(false);

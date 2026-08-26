@@ -172,14 +172,34 @@ def recurring_incidents_tool(bundle: AnalysisBundle, min_affected_flows: int = 2
     }
 
 
-def correlation_quality_tool(bundle: AnalysisBundle) -> Dict[str, Any]:
+def correlation_quality_tool(bundle: AnalysisBundle, flow_id: Optional[str] = None) -> Dict[str, Any]:
+    """Correlation conflicts/candidate-links/low-confidence-hints, straight
+    from bundle.correlation_result -- same object build_correlation_explorer
+    (backend/analysis/dashboards.py) reshapes for the Correlation Explorer
+    UI, so this tool's answer is always consistent with what that graph
+    shows. No new correlation math: conflicting_identifiers, matching_keys,
+    and source_event_ids are already fully computed by correlate_events()
+    (backend/analysis/correlate.py) and just weren't surfaced here before.
+
+    Pass flow_id to filter every category down to only the entries touching
+    that one flow (its flow_id or transaction_id) -- this is what answers
+    "why was X flagged as conflicting" / "why were X and Y linked", since
+    filtering by one endpoint of a conflict/link/hint returns it regardless
+    of which flow's id the caller happened to supply."""
     cr = bundle.correlation_result
     qr = bundle.quality_result
     conflicts = cr.conflicts if cr else []
     candidate_links = cr.candidate_links if cr else []
     low_conf_hints = cr.low_confidence_hints if cr else []
+
+    if flow_id:
+        conflicts = [c for c in conflicts if flow_id in c.affected_flow_ids]
+        candidate_links = [l for l in candidate_links if flow_id in (l.flow_a_id, l.flow_b_id)]
+        low_conf_hints = [h for h in low_conf_hints if flow_id in h.flow_ids]
+
     return {
         "tool": "correlation_quality",
+        "flow_id": flow_id,
         "conflict_count": len(conflicts),
         "conflicts": [
             {
@@ -187,11 +207,34 @@ def correlation_quality_tool(bundle: AnalysisBundle) -> Dict[str, Any]:
                 "triggering_key_type": c.triggering_key_type,
                 "triggering_value": c.triggering_value,
                 "affected_flow_ids": c.affected_flow_ids,
+                "conflicting_identifiers": [ci.model_dump() for ci in c.conflicting_identifiers],
+                "source_event_ids_a": c.source_event_ids_a,
+                "source_event_ids_b": c.source_event_ids_b,
             }
             for c in conflicts[:20]
         ],
         "candidate_link_count": len(candidate_links),
+        "candidate_links": [
+            {
+                "link_type": l.link_type,
+                "confidence": l.confidence.value,
+                "flow_a_id": l.flow_a_id,
+                "flow_b_id": l.flow_b_id,
+                "matching_keys": l.matching_keys,
+                "note": l.note,
+            }
+            for l in candidate_links[:20]
+        ],
         "low_confidence_hint_count": len(low_conf_hints),
+        "low_confidence_hints": [
+            {
+                "hint_type": h.hint_type,
+                "value": h.value,
+                "flow_ids": h.flow_ids,
+                "note": h.note,
+            }
+            for h in low_conf_hints[:20]
+        ],
         "correlation_quality_breakdown": qr.correlation_quality_breakdown.model_dump() if qr else {},
     }
 
@@ -337,8 +380,15 @@ TOOL_SPECS: List[Dict[str, Any]] = [
     },
     {
         "name": "correlation_quality",
-        "description": "Correlation conflicts, candidate links, and low-confidence hints from the cross-log correlation engine. Use for 'are there correlation problems in the logs'.",
-        "parameters": {},
+        "description": (
+            "Correlation conflicts, candidate links, and low-confidence hints from the cross-log correlation "
+            "engine, including the exact mismatched or matching field values that explain WHY flows were "
+            "flagged. Use for 'are there correlation problems in the logs', 'why was transaction X flagged as "
+            "conflicting', 'why were X and Y linked'. Pass flow_id (a flow_id or transaction_id from the "
+            "question) to filter down to only the conflicts/links/hints involving that one flow; omit it for "
+            "an overall summary."
+        ),
+        "parameters": {"flow_id": "optional, a specific flow_id or transaction_id to filter to"},
     },
     {
         "name": "issuer_failure_rates",

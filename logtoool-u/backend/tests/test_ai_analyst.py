@@ -291,3 +291,52 @@ def test_correlation_conflict_present_forces_mandatory_statement(mocker, db):
     assistant = AIAnalystAssistant(mock_client)
     answer = assistant.ask("Are there correlation problems in the logs?", bundle)
     assert any("CORRELATION CONFLICT" in e.text for e in answer.evidence)
+
+
+def test_correlation_quality_flow_id_scoped_question_cites_conflicting_values(mocker, db):
+    # Same conflict shape as above, but this time the model is given a
+    # flow_id (as it would be after tool selection extracts one from a "why
+    # was X flagged as conflicting" question) and the narration cites the
+    # conflicting_identifiers detail that's only present once filtered.
+    _insert(db, "c1", "2026-08-21T09:00:00Z", "cardinal_stepup_oob_log", "vplus_input", "TXN1",
+            {"flow": {"transaction_id": "TXN1", "trackers": ["SU1"]}})
+    _insert(db, "c2", "2026-08-21T09:00:01Z", "cardinal_stepup_oob_log", "vplus_input", "TXN1",
+            {"flow": {"transaction_id": "TXN1", "trackers": ["SU1"]}}, line_no=2)
+    _insert(db, "c3", "2026-08-21T09:05:00Z", "cardinal_stepup_oob_log", "vplus_input", "TXN2",
+            {"flow": {"transaction_id": "TXN2", "trackers": ["SU1"]}}, line_no=3)
+    _insert(db, "c4", "2026-08-21T09:05:01Z", "cardinal_stepup_oob_log", "vplus_input", "TXN2",
+            {"flow": {"transaction_id": "TXN2", "trackers": ["SU1"]}}, line_no=4)
+    bundle = run_analysis_pipeline(db)
+    flow_a_id = bundle.correlation_result.conflicts[0].affected_flow_ids[0]
+
+    mock_client = _mock_client(
+        mocker,
+        side_effect=[
+            ({"tool": "correlation_quality", "parameters": {"flow_id": flow_a_id}}, None),
+            (
+                {
+                    "answer": "This flow conflicts with another flow because they share tracker SU1 but disagree on transaction_id.",
+                    "evidence": [
+                        {
+                            "evidence_type": "observed_fact",
+                            "text": "transaction_id disagreed: TXN1 vs TXN2.",
+                            "evidence_event_ids": [],
+                            "flow_ids": [flow_a_id],
+                        }
+                    ],
+                    "confidence": "HIGH",
+                    "recommended_investigation_area": None,
+                },
+                None,
+            ),
+        ],
+    )
+    assistant = AIAnalystAssistant(mock_client)
+    answer = assistant.ask(f"Why was flow {flow_a_id} flagged as conflicting?", bundle)
+
+    assert answer.tool_used == "correlation_quality"
+    assert answer.tool_parameters == {"flow_id": flow_a_id}
+    assert any("TXN1 vs TXN2" in e.text for e in answer.evidence)
+    # The mandatory conflict statement scopes its wording to the flow when
+    # flow_id was used, instead of the whole-window phrasing.
+    assert any(f"involving flow '{flow_a_id}'" in e.text for e in answer.evidence)
