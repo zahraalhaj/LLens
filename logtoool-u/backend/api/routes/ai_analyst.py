@@ -13,6 +13,7 @@ that Phase 2-10 didn't already compute (see backend/analysis/query_tools.py).
 Every question is audit-logged (backend/llm/audit.py): user, timestamp,
 question, data sources used, result, model/engine version.
 """
+import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -34,7 +35,7 @@ class AskRequest(BaseModel):
 
 
 @router.post("/ask")
-def ask(
+async def ask(
     body: AskRequest,
     lookback_hours: int = Query(24 * 7, ge=1, le=24 * 365),
     date_from: Optional[str] = Query(None),
@@ -47,7 +48,11 @@ def ask(
     resolved_from, resolved_to = resolve_date_range(lookback_hours, date_from, date_to)
     bundle = run_analysis_pipeline(db, date_from=resolved_from, date_to=resolved_to)
 
-    answer = assistant.ask(body.question, bundle)
+    # Run the Ollama LLM calls in a dedicated thread so that slow
+    # inference (tool selection + narration) does not block FastAPI's
+    # shared request thread pool -- other users' page loads stay
+    # responsive while one person's AI question is processing.
+    answer = await asyncio.to_thread(assistant.ask, body.question, bundle)
 
     audit_log.record(
         user_id=user.user_id,

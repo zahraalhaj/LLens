@@ -28,8 +28,11 @@ ANOTHER identifier type would otherwise merge them, the merge is refused
 and a CorrelationConflict is recorded instead -- see _would_conflict().
 """
 import hashlib
+import logging
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger("logtool.analysis.correlate")
 
 from backend.analysis.correlation_schema import (
     CandidateLink,
@@ -66,6 +69,15 @@ HIGH_KEY_TYPES: Tuple[str, ...] = (_DUPLICATE_KEY,) + IDENTIFIER_KEY_TYPES
 # named constant, same convention as vplus_monitoring.py's
 # DEFAULT_GAP_THRESHOLD_MINUTES/DEFAULT_EXPECTED_RESPONSE_MS.
 DEFAULT_COMPOSITE_WINDOW_SECONDS = 300
+
+# Safety cap for the O(k²) pairwise comparison in _medium_confidence_links().
+# During card-testing storms or other pathological datasets a single
+# credential_id group can grow to thousands of flows.  Comparing every pair
+# would be O(n²) within that group, potentially stalling the pipeline for
+# minutes.  We skip groups larger than this and log a warning instead --
+# the missed candidate links are informational-only (never auto-merged)
+# so this is a safe degradation.
+_MAX_PAIRWISE_GROUP_SIZE = 200
 
 
 def _dedup_key(event: NormalizedEvent) -> Tuple[Any, ...]:
@@ -387,6 +399,12 @@ def _medium_confidence_links(
         if flow.credential_id:
             by_credential[flow.credential_id].append(flow)
     for credential_id, group in by_credential.items():
+        if len(group) > _MAX_PAIRWISE_GROUP_SIZE:
+            logger.warning(
+                "Skipping credential_id group %s: %d flows exceeds cap %d (card-testing storm?)",
+                credential_id, len(group), _MAX_PAIRWISE_GROUP_SIZE,
+            )
+            continue
         for a_idx in range(len(group)):
             for b_idx in range(a_idx + 1, len(group)):
                 a, b = group[a_idx], group[b_idx]
@@ -412,6 +430,12 @@ def _medium_confidence_links(
         if flow.issuer_id and flow.card_last4 and flow.amount is not None and flow.currency:
             by_business_context[(flow.issuer_id, flow.card_last4, flow.amount, flow.currency)].append(flow)
     for context_key, group in by_business_context.items():
+        if len(group) > _MAX_PAIRWISE_GROUP_SIZE:
+            logger.warning(
+                "Skipping composite context group %s: %d flows exceeds cap %d",
+                context_key, len(group), _MAX_PAIRWISE_GROUP_SIZE,
+            )
+            continue
         for a_idx in range(len(group)):
             for b_idx in range(a_idx + 1, len(group)):
                 a, b = group[a_idx], group[b_idx]

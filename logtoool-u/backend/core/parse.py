@@ -210,22 +210,59 @@ def parse_event_with_profile(
     return event, (parsed_successfully and valid_timestamp)
 
 
+def _is_json_line(line: str) -> bool:
+    """Quick structural check: does this line look like a JSON object?"""
+    stripped = line.lstrip()
+    return stripped.startswith("{") and stripped.endswith("}")
+
+
+def _is_delimited_line(line: str, delimiter: str = ",") -> bool:
+    """Quick structural check: does this line contain the expected delimiter
+    at least once, and NOT look like JSON?"""
+    if _is_json_line(line):
+        return False
+    return delimiter in line
+
+
 def evaluate_profile_match(
     grouped_sample: List[GroupedLineEvent],
     profile: ParserProfile
 ) -> Tuple[float, List[CanonicalLogEvent]]:
     """
-    Evaluates profile match ratio on sample events (first 200 grouped events).
-    Formula: match_ratio = (parsed events with valid timestamp) / (total grouped events)
+    Evaluates profile match quality on sample events (first 200 grouped
+    events).  The score is a weighted combination of:
+
+      - Timestamp parse rate (0.6 weight) -- can the profile extract and
+        parse a timestamp from most lines?
+      - Structural quality (0.4 weight) -- does the parsed event carry a
+        non-empty message AND a non-UNKNOWN level?  This penalises
+        profiles that "match" every line by capturing a timestamp but
+        producing garbage everywhere else.
+
+    A profile must also pass a type-specific pre-filter before scoring:
+    JSON profiles only score JSON-looking lines, delimited profiles only
+    score delimiter-containing lines, etc.  This prevents false positives
+    where a regex accidentally captures a timestamp from a JSON blob.
     """
     if not grouped_sample:
         return 0.0, []
 
     sample_to_test = grouped_sample[:200]
     valid_ts_count = 0
+    structural_ok_count = 0
     parsed_events: List[CanonicalLogEvent] = []
 
     for item in sample_to_test:
+        header = item.header_line
+
+        # --- type-specific pre-filter ---
+        if profile.type == ProfileType.JSON and not _is_json_line(header):
+            continue
+        if profile.type == ProfileType.DELIMITED:
+            delim = profile.pattern if profile.pattern in (",", "\t", "|", ";") else ","
+            if not _is_delimited_line(header, delim):
+                continue
+
         evt, valid_ts = parse_event_with_profile(
             grouped_event=item,
             profile=profile,
@@ -236,8 +273,17 @@ def evaluate_profile_match(
             parsed_events.append(evt)
         if valid_ts:
             valid_ts_count += 1
+            # Structural quality: message must be non-empty and level must
+            # be something the normaliser could resolve (not UNKNOWN).
+            msg_ok = bool(evt and evt.message and evt.message.strip())
+            level_ok = bool(evt and evt.level and evt.level.value != "UNKNOWN")
+            if msg_ok and level_ok:
+                structural_ok_count += 1
 
-    match_ratio = valid_ts_count / float(len(sample_to_test))
+    tested = len(sample_to_test) or 1
+    ts_score = valid_ts_count / tested
+    struct_score = structural_ok_count / tested
+    match_ratio = 0.6 * ts_score + 0.4 * struct_score
     return match_ratio, parsed_events
 
 
@@ -246,15 +292,39 @@ def select_best_profile(
     profiles: List[ParserProfile]
 ) -> Tuple[Optional[ParserProfile], float]:
     """
-    Selects the profile with highest score above its min_match_ratio threshold.
+    Scores every profile against the sample and returns the winner.
+    Pre-filters skip profiles whose type is structurally incompatible
+    with the sample (e.g. a JSON profile is skipped when no line looks
+    like JSON).  If no profile meets its min_match_ratio threshold the
+    best-scoring one is returned anyway with a warning -- this is better
+    than blindly picking the first profile in filesystem order.
     """
     best_profile: Optional[ParserProfile] = None
     best_score = -1.0
+    scored: List[Tuple[str, float]] = []
 
     for profile in profiles:
         score, _ = evaluate_profile_match(grouped_sample, profile)
+        scored.append((profile.name, round(score, 4)))
         if score >= profile.min_match_ratio and score > best_score:
             best_score = score
             best_profile = profile
+
+    # If nothing met threshold, pick the highest scorer anyway --
+    # still better than the arbitrary first-profile fallback.
+    if best_profile is None and scored:
+        scored.sort(key=lambda x: x[1], reverse=True)
+        top_name, top_score = scored[0]
+        for p in profiles:
+            if p.name == top_name:
+                best_profile = p
+                best_score = top_score
+                logger.warning(
+                    "No profile met its min_match_ratio; falling back to "
+                    "best scorer '%s' (score=%.4f).  Results may be poor -- "
+                    "consider adding a dedicated parser profile for this format.",
+                    top_name, top_score,
+                )
+                break
 
     return best_profile, (best_score if best_score >= 0 else 0.0)

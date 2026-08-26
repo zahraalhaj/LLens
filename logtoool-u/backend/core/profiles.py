@@ -33,7 +33,7 @@ DEFAULT_PROFILES: List[Dict] = [
         "message_field": "message",
         "default_source_system": "apache",
         "timezone": "UTC",
-        "min_match_ratio": 0.8,
+        "min_match_ratio": 0.85,
         "level_map": {
             "200": "INFO", "201": "INFO", "204": "INFO",
             "301": "INFO", "302": "INFO", "304": "INFO",
@@ -53,7 +53,7 @@ DEFAULT_PROFILES: List[Dict] = [
         "source_system_field": "host",
         "default_source_system": "syslog",
         "timezone": "UTC",
-        "min_match_ratio": 0.8
+        "min_match_ratio": 0.85
     },
     {
         "name": "Application JSON Log",
@@ -65,7 +65,7 @@ DEFAULT_PROFILES: List[Dict] = [
         "message_field": "message",
         "default_source_system": "app_backend",
         "timezone": "UTC",
-        "min_match_ratio": 0.8
+        "min_match_ratio": 0.85
     },
     {
         "name": "Delimited CSV/TSV Log",
@@ -78,7 +78,7 @@ DEFAULT_PROFILES: List[Dict] = [
         "default_source_system": "csv_export",
         "delimiter_fields": ["timestamp", "level", "component", "message"],
         "timezone": "UTC",
-        "min_match_ratio": 0.8
+        "min_match_ratio": 0.85
     },
     {
         "name": "Apache Error Log",
@@ -92,7 +92,7 @@ DEFAULT_PROFILES: List[Dict] = [
         "source_system_field": "client",
         "default_source_system": "apache_server",
         "timezone": "UTC",
-        "min_match_ratio": 0.8,
+        "min_match_ratio": 0.85,
         "level_map": {"NOTICE": "INFO", "WARN": "WARN", "ERROR": "ERROR", "CRIT": "CRITICAL", "ALERT": "CRITICAL", "EMERG": "CRITICAL"}
     },
     {
@@ -106,12 +106,12 @@ DEFAULT_PROFILES: List[Dict] = [
         "message_field": "message",
         "default_source_system": "springboot_app",
         "timezone": "UTC",
-        "min_match_ratio": 0.8
+        "min_match_ratio": 0.85
     },
     {
         "name": "Standard Bracket [TIMESTAMP] [LEVEL]",
         "type": "regex",
-        "pattern": r'^(?:\[)?(?P<timestamp>\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)(?:\])?\s*\[(?P<level>\w+)\]\s*(?:\[(?P<component>[^\]]+)\])?\s*:?\s*(?P<message>.*)$',
+        "pattern": r'^\[(?P<timestamp>\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\]\s*\[(?P<level>\w+)\]\s*(?:\[(?P<component>[^\]]+)\]\s*)?(?::?\s*(?P<message>.+))?$',
         "timestamp_field": "timestamp",
         "timestamp_format": None,
         "level_field": "level",
@@ -119,7 +119,7 @@ DEFAULT_PROFILES: List[Dict] = [
         "message_field": "message",
         "default_source_system": "generic_app",
         "timezone": "UTC",
-        "min_match_ratio": 0.8
+        "min_match_ratio": 0.85
     }
 ]
 

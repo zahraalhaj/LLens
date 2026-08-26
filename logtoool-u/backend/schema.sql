@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS batches (
     file_size_bytes INTEGER NOT NULL,
     total_events INTEGER DEFAULT 0,
     matched_profile TEXT,
+    matched_profile_version TEXT,
     match_ratio REAL,
     uploaded_at TEXT NOT NULL
 );
@@ -37,6 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_events_source ON events(source_system);
 CREATE INDEX IF NOT EXISTS idx_events_component ON events(component);
 CREATE INDEX IF NOT EXISTS idx_events_batch_id ON events(batch_id);
 CREATE INDEX IF NOT EXISTS idx_events_file_name ON events(file_name);
+CREATE INDEX IF NOT EXISTS idx_events_source_ts ON events(source_system, ts_utc);
 
 -- Auth: simple built-in username+password accounts (~20 internal users).
 -- Passwords are bcrypt hashes, never plaintext. "role" is intentionally just
