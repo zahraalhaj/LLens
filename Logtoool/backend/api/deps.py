@@ -80,7 +80,13 @@ def get_profile_generator() -> LLMProfileGenerator:
 
 @lru_cache
 def get_email_dispatcher() -> EmailDispatcher:
-    return EmailDispatcher()
+    return EmailDispatcher(
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_user=settings.smtp_user,
+        smtp_password=settings.smtp_password,
+        alert_email_to=settings.alert_email_to,
+    )
 
 
 @lru_cache

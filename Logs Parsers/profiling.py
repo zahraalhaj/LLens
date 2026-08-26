@@ -58,7 +58,7 @@ def parse_log_file(log_file_path):
                 continue
             process_record(timestamp, "INFO", body, parsed_records, file_name)
 
-    return parsed_records
+    return parsed_records   
 
 
 def process_record(timestamp, log_level, body, parsed_records, file_name):

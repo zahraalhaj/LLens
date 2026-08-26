@@ -344,6 +344,21 @@ class DatabaseManager:
         finally:
             session.close()
 
+    def delete_batch(self, batch_id: str) -> bool:
+        """Delete a single batch and its events (via ON DELETE CASCADE).
+        Returns True if the batch existed and was deleted, False if not found."""
+        session = self.Session()
+        try:
+            batch = session.query(BatchModel).filter_by(batch_id=batch_id).first()
+            if not batch:
+                return False
+            session.delete(batch)
+            session.commit()
+            logger.info("Deleted batch %s (%s)", batch_id, batch.file_name)
+            return True
+        finally:
+            session.close()
+
     def get_component_error_counts(self) -> Dict[str, int]:
         """ERROR/CRITICAL event counts grouped by component. Used by the
         (heuristic, not ML) anomaly report -- a real SQL aggregate, not a

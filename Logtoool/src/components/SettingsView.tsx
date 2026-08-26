@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, CheckCircle2, AlertTriangle, Play, Save, Cpu, Terminal, RefreshCw, Server, Zap, Lock } from 'lucide-react';
+import { Settings, CheckCircle2, AlertTriangle, Play, Save, Cpu, Terminal, RefreshCw, Server, Zap, Lock, Mail, Bell } from 'lucide-react';
 import { ParserProfile, ProfileType } from '../types';
 import { api, ApiError } from '../api';
 
@@ -10,8 +10,16 @@ interface SettingsViewProps {
   isAdmin: boolean;
 }
 
+interface SmtpConfig {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_password_set: boolean;
+  alert_email_to: string;
+}
+
 export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshProfiles, ollamaAvailable, isAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'manager' | 'builder' | 'ai'>('ai');
+  const [activeTab, setActiveTab] = useState<'manager' | 'builder' | 'ai' | 'notifications'>('ai');
 
   // Profile Builder State
   const [pName, setPName] = useState<string>('Custom Log Format');
@@ -38,12 +46,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
   const [ollamaTestResult, setOllamaTestResult] = useState<{ available: boolean; status: string } | null>(null);
   const [testingOllama, setTestingOllama] = useState<boolean>(false);
 
+  // SMTP / Notification config
+  const [smtpConfig, setSmtpConfig] = useState<SmtpConfig | null>(null);
+  const [smtpForm, setSmtpForm] = useState({ smtp_host: '', smtp_port: 587, smtp_user: '', smtp_password: '', alert_email_to: '' });
+  const [smtpSaving, setSmtpSaving] = useState<boolean>(false);
+  const [smtpStatus, setSmtpStatus] = useState<string | null>(null);
+  const [smtpError, setSmtpError] = useState<string | null>(null);
+
   useEffect(() => {
     api
       .get<{ ollama_url: string; ollama_model: string }>('/api/ai/config')
       .then(setAiConfig)
       .catch((err) => console.error('Failed to load AI config:', err));
-  }, []);
+    if (isAdmin) {
+      api
+        .get<SmtpConfig>('/api/settings/smtp')
+        .then((cfg) => {
+          setSmtpConfig(cfg);
+          setSmtpForm({ smtp_host: cfg.smtp_host, smtp_port: cfg.smtp_port, smtp_user: cfg.smtp_user, smtp_password: '', alert_email_to: cfg.alert_email_to });
+        })
+        .catch((err) => console.error('Failed to load SMTP config:', err));
+    }
+  }, [isAdmin]);
 
   const handleTestOllama = async () => {
     setTestingOllama(true);
@@ -96,6 +120,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
     }
   };
 
+  const handleSaveSmtp = async () => {
+    setSmtpSaving(true);
+    setSmtpStatus(null);
+    setSmtpError(null);
+    try {
+      await api.put('/api/settings/smtp', smtpForm);
+      setSmtpStatus('SMTP settings saved. Restart the server for changes to take effect.');
+      // Refresh the displayed config
+      const cfg = await api.get<SmtpConfig>('/api/settings/smtp');
+      setSmtpConfig(cfg);
+    } catch (err) {
+      setSmtpError(err instanceof ApiError ? err.detail : 'Failed to save SMTP settings');
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-surface p-6 rounded-2xl border border-surface-border shadow-2xs space-y-4 card-brand-glow">
@@ -131,6 +172,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
               }`}
             >
               Profile Builder
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`px-4 py-2 font-bold text-xs border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'notifications' ? 'border-brand text-brand' : 'border-transparent text-text-muted hover:text-text'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>Notifications</span>
             </button>
           )}
         </div>
@@ -333,6 +385,142 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
 
                 {saveStatus && <div className="p-2.5 bg-success-light border border-success/30 rounded text-xs text-success font-semibold">{saveStatus}</div>}
                 {saveError && <div className="p-2.5 bg-error-light border border-error/30 rounded text-xs text-error font-semibold">{saveError}</div>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'notifications' && isAdmin && (
+          <div className="space-y-6 pt-2">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-7 bg-sidebar text-white p-5 rounded-2xl border border-sidebar-border space-y-4">
+                <div className="flex items-center justify-between border-b border-sidebar-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-brand" />
+                    <h3 className="text-sm font-extrabold text-white tracking-wide uppercase">SMTP Configuration</h3>
+                  </div>
+                  <span className="text-[10px] bg-brand/10 text-brand border border-brand/30 px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
+                    <Bell className="w-3 h-3" /> Alert Notifications
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <p className="text-white/50">
+                    Configure the SMTP server used to send alert notifications. Alert rules dispatch emails when
+                    log events match their criteria. Leave host as <code className="text-warning">localhost</code> to simulate sends without a real server.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-white/80 mb-1">SMTP Host</label>
+                      <input
+                        type="text"
+                        value={smtpForm.smtp_host}
+                        onChange={(e) => setSmtpForm({ ...smtpForm, smtp_host: e.target.value })}
+                        className="w-full bg-sidebar border border-sidebar-border rounded-lg p-2.5 font-mono text-white/80 text-xs"
+                        placeholder="localhost"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-white/80 mb-1">SMTP Port</label>
+                      <input
+                        type="number"
+                        value={smtpForm.smtp_port}
+                        onChange={(e) => setSmtpForm({ ...smtpForm, smtp_port: parseInt(e.target.value) || 587 })}
+                        className="w-full bg-sidebar border border-sidebar-border rounded-lg p-2.5 font-mono text-white/80 text-xs"
+                        placeholder="587"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-white/80 mb-1">SMTP Username</label>
+                    <input
+                      type="text"
+                      value={smtpForm.smtp_user}
+                      onChange={(e) => setSmtpForm({ ...smtpForm, smtp_user: e.target.value })}
+                      className="w-full bg-sidebar border border-sidebar-border rounded-lg p-2.5 font-mono text-white/80 text-xs"
+                      placeholder="Empty for no auth"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-white/80 mb-1">
+                      SMTP Password {smtpConfig?.smtp_password_set && <span className="text-success">(set)</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={smtpForm.smtp_password}
+                      onChange={(e) => setSmtpForm({ ...smtpForm, smtp_password: e.target.value })}
+                      className="w-full bg-sidebar border border-sidebar-border rounded-lg p-2.5 font-mono text-white/80 text-xs"
+                      placeholder={smtpConfig?.smtp_password_set ? '••••••••' : 'Leave empty to keep current'}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-white/80 mb-1">Default Recipient Email</label>
+                    <input
+                      type="email"
+                      value={smtpForm.alert_email_to}
+                      onChange={(e) => setSmtpForm({ ...smtpForm, alert_email_to: e.target.value })}
+                      className="w-full bg-sidebar border border-sidebar-border rounded-lg p-2.5 font-mono text-aquamarine text-xs"
+                      placeholder="admin@example.com"
+                    />
+                    <p className="text-[10px] text-white/40 mt-1">Used when a rule has no specific recipients</p>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      onClick={handleSaveSmtp}
+                      disabled={smtpSaving}
+                      className="px-4 py-2 bg-brand hover:bg-brand-hover text-white font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-md shadow-brand/20"
+                    >
+                      {smtpSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Save SMTP Settings
+                    </button>
+                  </div>
+
+                  {smtpStatus && (
+                    <div className="p-3 rounded-lg border text-xs font-mono bg-success/10 border-success/30 text-success">
+                      <div className="font-bold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {smtpStatus}
+                      </div>
+                    </div>
+                  )}
+                  {smtpError && (
+                    <div className="p-3 rounded-lg border text-xs font-mono bg-error/10 border-error/30 text-error">
+                      <div className="font-bold flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        {smtpError}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="lg:col-span-5 bg-surface-alt p-5 rounded-2xl border border-surface-border space-y-3">
+                <h3 className="text-xs font-extrabold text-text uppercase tracking-wider flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-brand" />
+                  How Alert Notifications Work
+                </h3>
+                <ol className="space-y-3 text-xs text-text-secondary list-decimal list-inside font-medium">
+                  <li className="bg-surface p-2.5 rounded-lg border border-surface-border">
+                    <strong className="text-text block font-bold mb-0.5">1. Create Alert Rules</strong>
+                    Go to the <strong className="text-brand">Alerts</strong> page and create rules with level thresholds, source filters, and delivery mode (immediate or digest).
+                  </li>
+                  <li className="bg-surface p-2.5 rounded-lg border border-surface-border">
+                    <strong className="text-text block font-bold mb-0.5">2. Ingest Logs</strong>
+                    Upload log files or load samples. Each batch is automatically evaluated against all enabled rules.
+                  </li>
+                  <li className="bg-surface p-2.5 rounded-lg border border-surface-border">
+                    <strong className="text-text block font-bold mb-0.5">3. Emails Dispatched</strong>
+                    Matching events trigger email notifications to the rule's recipients (or the default address above). Deduplication prevents alert storms.
+                  </li>
+                </ol>
+                <div className="bg-surface p-2.5 rounded-lg border border-surface-border text-[11px] text-text-muted">
+                  <strong className="text-text">Tip:</strong> Set SMTP host to <code className="text-brand">localhost</code> to test without a real mail server — sends are simulated and logged.
+                </div>
               </div>
             </div>
           </div>

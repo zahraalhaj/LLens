@@ -14,13 +14,20 @@ logger = logging.getLogger("logtool.alerts.email")
 
 
 class EmailDispatcher:
-    def __init__(self):
-        # Credentials sourced strictly from environment variables
-        self.smtp_host = os.getenv("SMTP_HOST", "localhost")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_user = os.getenv("SMTP_USER", "")
-        self.smtp_password = os.getenv("SMTP_PASSWORD", "")
-        self.alert_email_to = os.getenv("ALERT_EMAIL_TO", "admin@example.com")
+    def __init__(
+        self,
+        smtp_host: str | None = None,
+        smtp_port: int | None = None,
+        smtp_user: str | None = None,
+        smtp_password: str | None = None,
+        alert_email_to: str | None = None,
+    ):
+        # Credentials sourced from explicit params (Settings) with env var fallback
+        self.smtp_host = smtp_host or os.getenv("SMTP_HOST", "localhost")
+        self.smtp_port = smtp_port or int(os.getenv("SMTP_PORT", "587"))
+        self.smtp_user = smtp_user or os.getenv("SMTP_USER", "")
+        self.smtp_password = smtp_password or os.getenv("SMTP_PASSWORD", "")
+        self.alert_email_to = alert_email_to or os.getenv("ALERT_EMAIL_TO", "admin@example.com")
 
     def send_alert_email(
         self, subject: str, body_text: str, recipient_override: Optional[str] = None

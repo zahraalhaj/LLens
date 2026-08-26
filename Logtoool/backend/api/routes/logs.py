@@ -166,6 +166,8 @@ def ingest_directory(
 def ingest_sample(
     _user: AuthenticatedUser = Depends(get_current_user),
     ingestion: LogIngestionEngine = Depends(get_ingestion_engine),
+    db: DatabaseManager = Depends(get_db),
+    alerts: AlertRulesProcessor = Depends(get_alert_processor),
 ):
     samples_dir = Path(__file__).resolve().parents[2] / "samples"
     sample_files = sorted(samples_dir.glob("*.jsonl")) + sorted(samples_dir.glob("*.log"))
@@ -178,6 +180,13 @@ def ingest_sample(
             size = f.stat().st_size
             summary = ingestion.ingest_file_stream(file_obj=fh, file_name=f.name, file_size_bytes=size)
             summaries.append(summary.model_dump())
+
+            if summary.parsed_events_count > 0:
+                events, _ = db.query_events(page=1, page_size=summary.parsed_events_count, batch_id=summary.batch_id)
+                try:
+                    alerts.evaluate_batch_alerts(batch_id=summary.batch_id, events=events)
+                except Exception:
+                    logger.exception("Alert evaluation failed for sample batch %s", summary.batch_id)
     return {"ingested": summaries}
 
 

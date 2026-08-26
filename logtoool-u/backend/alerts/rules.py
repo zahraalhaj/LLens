@@ -32,10 +32,20 @@ def _effective_recipients(rule: Dict[str, Any], group_by_id: Dict[str, Dict[str,
     instead of retyping the same email list on each one. Falls back
     gracefully to `recipients` (then ultimately the server default) if the
     referenced group was since deleted."""
-    if rule.get("notification_group_id"):
-        group = group_by_id.get(rule["notification_group_id"])
+    group_id = rule.get("notification_group_id")
+    if group_id:
+        group = group_by_id.get(group_id)
         if group:
+            logger.debug(
+                "Resolved recipients for rule %s: group %s → %s",
+                rule.get("rule_id"), group_id, group["emails"],
+            )
             return group["emails"]
+        logger.warning(
+            "Rule %s references notification_group_id %s but group not found; "
+            "falling back to rule recipients",
+            rule.get("rule_id"), group_id,
+        )
     return rule["recipients"]
 
 
@@ -217,6 +227,10 @@ class AlertRulesProcessor:
         recipients: Optional[str] = None,
         correlation_value: Optional[str] = None,
     ) -> None:
+        logger.info(
+            "Dispatching alert rule=%s recipients=%s (group_id=%s)",
+            rule["name"], recipients, rule.get("notification_group_id"),
+        )
         success, status_msg = self.email_dispatcher.send_alert_email(
             subject, body, recipient_override=recipients
         )

@@ -33,6 +33,7 @@ from backend.api.routes import (
     machines,
     otp_processor,
     profiles,
+    settings as settings_routes,
     users,
     vflex,
     vplus_monitoring,
@@ -142,3 +143,4 @@ app.include_router(cardinal.router)
 app.include_router(vflex.router)
 app.include_router(analytics.router)
 app.include_router(ai_analyst.router)
+app.include_router(settings_routes.router)

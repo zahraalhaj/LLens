@@ -91,9 +91,17 @@ def get_profile_generator() -> LLMProfileGenerator:
     return LLMProfileGenerator(ollama_client=get_ollama_client())
 
 
-@lru_cache
+# NOT lru_cache'd: SMTP settings can change at runtime via the Settings GUI.
+# A cached instance would hold stale values until server restart.
+
 def get_email_dispatcher() -> EmailDispatcher:
-    return EmailDispatcher()
+    return EmailDispatcher(
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_user=settings.smtp_user,
+        smtp_password=settings.smtp_password,
+        alert_email_to=settings.alert_email_to,
+    )
 
 
 @lru_cache
@@ -111,7 +119,9 @@ def get_notification_group_manager() -> NotificationGroupManager:
     return NotificationGroupManager(db_path=settings.db_path)
 
 
-@lru_cache
+# NOT lru_cache'd: depends on get_email_dispatcher which is not cached,
+# so a new processor picks up the latest SMTP settings each time.
+
 def get_alert_processor() -> AlertRulesProcessor:
     return AlertRulesProcessor(
         email_dispatcher=get_email_dispatcher(),
