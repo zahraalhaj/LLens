@@ -92,6 +92,13 @@ class LogIngestionEngine:
             profiles = self.profile_manager.list_profiles()
             grouped_sample = group_multiline_logs(sample_lines)
             active_profile, match_ratio = select_best_profile(grouped_sample, profiles)
+            if active_profile:
+                logger.info(
+                    "Profile detection: matched '%s' with score %.3f (threshold %.3f)",
+                    active_profile.name, match_ratio, active_profile.min_match_ratio,
+                )
+            else:
+                logger.info("Profile detection: no declarative profile matched")
 
         if not active_profile:
             # Before falling back to a possibly-wrong declarative profile,
@@ -103,6 +110,7 @@ class LogIngestionEngine:
                 active_profile = custom_profile
                 match_ratio = 1.0  # recomputed below once the full file is parsed
                 warnings.extend(custom_warnings)
+                logger.info("Profile detection: matched custom parser '%s'", custom_profile.name)
 
         if not active_profile:
             # Fallback profile if none matched
@@ -113,8 +121,13 @@ class LogIngestionEngine:
                 f"No parser profile met threshold {active_profile.min_match_ratio}. "
                 f"Using default fallback '{active_profile.name}' with match ratio {match_ratio:.2f}."
             )
+            logger.warning(
+                "Profile detection: fallback to '%s' with score %.3f",
+                active_profile.name, match_ratio,
+            )
 
         batch_record.matched_profile = active_profile.name
+        batch_record.matched_profile_version = active_profile.profile_version
         batch_record.match_ratio = round(match_ratio, 3)
 
         # Custom-parser profiles need the whole file content up front (their

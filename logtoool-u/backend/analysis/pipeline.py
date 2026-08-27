@@ -8,8 +8,10 @@ run_analysis_pipeline() -- none of them re-reads raw log rows or
 recomputes a metric ad hoc. This is what "do not calculate analytics
 directly from raw log files" means structurally, not just as a rule.
 """
+import hashlib
+import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from backend.analysis.correlate import correlate_events
 from backend.analysis.correlation_schema import CorrelatedFlow, CorrelationResult
@@ -31,11 +33,31 @@ ALL_PAYMENT_FAMILIES: tuple = tuple(f.value for f in LogFamily)
 
 # Single source of truth for "which version of the deterministic engine
 # produced this result" -- used by the Phase 11 AI Analyst's audit log
-# (backend/llm/audit.py) as the "rule/parser versions" field, since no
-# per-parser version numbering scheme exists elsewhere in this codebase.
-# Bump this string whenever a change to Phases 2-10 or query_tools.py
-# could change an analytical result for the same input data.
+# (backend/llm/audit.py) and stamped on every Phase 10 API response.
+# Per-parser versions are tracked separately via
+# ParserProfile.profile_version (a content hash) and carried in
+# AnalysisBundle.parser_versions -- bump this string when a change to
+# Phases 2-10 or query_tools.py could change an analytical result for
+# the same input data and parser configuration.
 ENGINE_VERSION = "llens-analysis-engine-v11"
+
+# -- Short-lived cache for deterministic pipeline results -------------------
+# The analysis pipeline is pure: same inputs → same outputs.  A 30-second
+# TTL avoids re-running the full engine on every dashboard tab switch or
+# AI Analyst follow-up question while still reflecting new ingestions
+# almost immediately.
+_PIPELINE_CACHE_TTL_SECONDS = 30
+_pipeline_cache: Dict[str, Tuple[float, "AnalysisBundle"]] = {}
+
+
+def _cache_key(
+    date_from: Optional[str],
+    date_to: Optional[str],
+    source_systems: Optional[List[str]],
+    limit_per_family: int,
+) -> str:
+    raw = f"{date_from}|{date_to}|{sorted(source_systems or [])}|{limit_per_family}"
+    return hashlib.md5(raw.encode()).hexdigest()
 
 
 @dataclass
@@ -48,6 +70,7 @@ class AnalysisBundle:
     queue_handoff: Optional[QueueHandoffReport] = None
     pattern_result: Optional[PatternAnalysisResult] = None
     quality_result: Optional[QualityAnalysisResult] = None
+    parser_versions: Dict[str, str] = field(default_factory=dict)
 
     @property
     def flows(self) -> List[CorrelatedFlow]:
@@ -74,13 +97,28 @@ def run_analysis_pipeline(
     uses -- see DatabaseManager.get_events_for_analysis()), normalizes
     (Phase 2), correlates (Phase 3), and runs every downstream
     deterministic phase (4-9). This is the ONLY function a Phase 10 route
-    should call for analytical data."""
+    should call for analytical data.
+
+    Results are cached for _PIPELINE_CACHE_TTL_SECONDS so that rapid
+    dashboard tab switches and AI Analyst follow-ups don't re-run the
+    full engine unnecessarily."""
+    key = _cache_key(date_from, date_to, source_systems, limit_per_family)
+    now = time.monotonic()
+    cached = _pipeline_cache.get(key)
+    if cached and (now - cached[0]) < _PIPELINE_CACHE_TTL_SECONDS:
+        return cached[1]
+
     families = source_systems or list(ALL_PAYMENT_FAMILIES)
     raw_events: List[dict] = []
     for family in families:
         raw_events.extend(
             db.get_events_for_analysis(source_system=family, date_from=date_from, date_to=date_to, limit=limit_per_family)
         )
+
+    # Collect distinct batch IDs to look up which parser profiles produced
+    # these events -- stamped on every API response for provenance.
+    batch_ids = list({e.get("batch_id") for e in raw_events if e.get("batch_id")})
+    parser_versions = db.get_profile_versions_for_batches(batch_ids)
 
     events = normalize_events(raw_events)
     correlation_result = correlate_events(events)
@@ -95,7 +133,7 @@ def run_analysis_pipeline(
     )
     quality_result = analyze_data_quality(events, correlation_result.flows, correlation_result=correlation_result)
 
-    return AnalysisBundle(
+    bundle = AnalysisBundle(
         events=events,
         correlation_result=correlation_result,
         lifecycles=lifecycles,
@@ -104,4 +142,7 @@ def run_analysis_pipeline(
         queue_handoff=queue_handoff,
         pattern_result=pattern_result,
         quality_result=quality_result,
+        parser_versions=parser_versions,
     )
+    _pipeline_cache[key] = (now, bundle)
+    return bundle

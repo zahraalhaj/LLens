@@ -27,7 +27,7 @@ from backend.analysis.dashboards import (
     search_flows,
     search_flows_by_raw_text,
 )
-from backend.analysis.pipeline import run_analysis_pipeline
+from backend.analysis.pipeline import ENGINE_VERSION, AnalysisBundle, run_analysis_pipeline
 from backend.api.date_range import resolve_date_range
 from backend.api.deps import get_current_user, get_db
 from backend.auth.service import AuthenticatedUser
@@ -37,6 +37,15 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 _DATE_FROM_Q = Query(None, description="ISO 8601 UTC start, e.g. 2026-08-20T00:00:00Z")
 _DATE_TO_Q = Query(None, description="ISO 8601 UTC end")
+
+
+def _stamp(response: dict, bundle: AnalysisBundle) -> dict:
+    """Attach the deterministic engine version and parser profile versions
+    to every dashboard response so investigation results carry a clear
+    provenance trail."""
+    response["engine_version"] = ENGINE_VERSION
+    response["parser_versions"] = bundle.parser_versions
+    return response
 
 
 def _pipeline(
@@ -59,7 +68,7 @@ def service_overview(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return build_service_overview(bundle, time_bucket_minutes=trend_bucket_minutes)
+    return _stamp(build_service_overview(bundle, time_bucket_minutes=trend_bucket_minutes), bundle)
 
 
 @router.get("/dependency-health")
@@ -71,7 +80,7 @@ def dependency_health(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return build_dependency_health(bundle)
+    return _stamp(build_dependency_health(bundle), bundle)
 
 
 @router.get("/dependency-health/{dependency}/trend")
@@ -85,7 +94,7 @@ def dependency_p95_trend(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return build_dependency_p95_trend(bundle, dependency, bucket_minutes=bucket_minutes)
+    return _stamp(build_dependency_p95_trend(bundle, dependency, bucket_minutes=bucket_minutes), bundle)
 
 
 @router.get("/dependency-health/oob-api/duration-histogram")
@@ -97,7 +106,7 @@ def oob_duration_histogram(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return build_oob_duration_histogram(bundle)
+    return _stamp(build_oob_duration_histogram(bundle), bundle)
 
 
 @router.get("/queue-messaging")
@@ -109,7 +118,7 @@ def queue_messaging(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return build_queue_messaging(bundle)
+    return _stamp(build_queue_messaging(bundle), bundle)
 
 
 @router.get("/investigation/merchants")
@@ -121,7 +130,7 @@ def investigation_merchants(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return {"merchants": list_available_merchants(bundle)}
+    return _stamp({"merchants": list_available_merchants(bundle)}, bundle)
 
 
 @router.get("/investigation/search")
@@ -139,7 +148,7 @@ def investigation_search(
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
     flow_ids = search_flows(bundle, field, query)
     results = [build_investigation_result(bundle, flow_id) for flow_id in flow_ids]
-    return {"query": query, "field": field, "match_count": len(flow_ids), "results": [r for r in results if r]}
+    return _stamp({"query": query, "field": field, "match_count": len(flow_ids), "results": [r for r in results if r]}, bundle)
 
 
 @router.get("/investigation/search-raw")
@@ -154,7 +163,7 @@ def investigation_search_raw(
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
     flow_ids = search_flows_by_raw_text(bundle, query)
     results = [build_investigation_result(bundle, flow_id) for flow_id in flow_ids]
-    return {"query": query, "match_count": len(flow_ids), "results": [r for r in results if r]}
+    return _stamp({"query": query, "match_count": len(flow_ids), "results": [r for r in results if r]}, bundle)
 
 
 @router.get("/investigation/{flow_id}")
@@ -170,7 +179,7 @@ def investigation_detail(
     result = build_investigation_result(bundle, flow_id)
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flow not found in the analyzed window")
-    return result
+    return _stamp(result, bundle)
 
 
 @router.get("/correlation-explorer")
@@ -182,7 +191,7 @@ def correlation_explorer(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return build_correlation_explorer(bundle)
+    return _stamp(build_correlation_explorer(bundle), bundle)
 
 
 @router.get("/security-quality")
@@ -194,4 +203,4 @@ def security_quality(
     db: DatabaseManager = Depends(get_db),
 ):
     bundle = _pipeline(db, lookback_hours, date_from, date_to)
-    return build_security_quality(bundle)
+    return _stamp(build_security_quality(bundle), bundle)

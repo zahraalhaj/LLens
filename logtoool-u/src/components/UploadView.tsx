@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, AlertTriangle, ArrowRight, Zap, FolderOpen, Sparkles, Save, Loader2, FolderInput, CheckCircle2, XCircle } from 'lucide-react';
+import { Upload, AlertTriangle, Zap, FolderOpen, Sparkles, Save, Loader2, FolderInput, CheckCircle2, XCircle } from 'lucide-react';
 import { ParserProfile, IngestionSummary, LogEvent } from '../types';
 import { api, ApiError } from '../api';
 
@@ -100,20 +100,6 @@ export const UploadView: React.FC<UploadViewProps> = ({ profiles, onIngestSucces
     setIsProcessing(false);
     setSelectedFiles([]);
     onIngestSuccess();
-  };
-
-  const handleLoadSample = async () => {
-    setIsProcessing(true);
-    setProgress(30);
-    try {
-      await api.post('/api/logs/ingest-sample');
-      setProgress(100);
-      onIngestSuccess();
-    } catch (err) {
-      console.error('Failed to load sample logs:', err);
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const handleIngestDirectory = async () => {
@@ -330,28 +316,9 @@ export const UploadView: React.FC<UploadViewProps> = ({ profiles, onIngestSucces
             )}
           </div>
 
-          <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wide mb-3">
-                <Zap className="w-4 h-4 text-amber-500" />
-                <span>Bundled Sample Logs</span>
-              </div>
-              <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-                Try the ingestion pipeline immediately with a bundled sample log.
-              </p>
-              <button
-                onClick={handleLoadSample}
-                className="w-full flex items-center justify-between p-3 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-lg text-left transition-all cursor-pointer group"
-              >
-                <div className="text-xs font-bold text-slate-800 group-hover:text-blue-600">Load sample logs</div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
-              </button>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-200 text-[11px] text-slate-500 leading-normal">
+          <div className="mt-6 pt-4 border-t border-slate-200 text-[11px] text-slate-500 leading-normal">
               <strong>Tip:</strong> Multiline stack traces are automatically coalesced into single logical events.
             </div>
-          </div>
         </div>
       </div>
 

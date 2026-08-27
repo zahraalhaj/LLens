@@ -3,9 +3,10 @@ Core schema definitions for Canonical Event Model and Parser Profiles.
 Uses Pydantic v2 for data validation and typing.
 """
 
+import hashlib
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from datetime import datetime, timezone
 import uuid
 
@@ -51,10 +52,24 @@ class ParserProfile(BaseModel):
     default_source_system: str = "generic_vendor"
     timezone: Optional[str] = "UTC"
     multiline_config: Optional[MultilineConfig] = Field(default_factory=MultilineConfig)
-    min_match_ratio: float = 0.8
+    min_match_ratio: float = 0.85
     level_map: Optional[Dict[str, str]] = None  # e.g., {"WARNING": "WARN", "ERR": "ERROR", "FATAL": "CRITICAL"}
     delimiter_fields: Optional[List[str]] = None  # For delimited format: header list if file lacks headers
     custom_parser_module: Optional[str] = None  # For type=CUSTOM: key into backend.core.custom_parser_registry
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def profile_version(self) -> str:
+        """Content-based hash of the profile configuration.  Changes
+        automatically whenever any field is modified, giving every
+        profile a deterministic version identifier without manual
+        version bumping."""
+        # Exclude profile_version itself to avoid infinite recursion
+        data = self.model_dump(exclude={"profile_version"})
+        raw = hashlib.sha256(
+            __import__("json").dumps(data, sort_keys=True, default=str).encode()
+        ).hexdigest()[:12]
+        return f"p-{raw}"
 
 
 class CanonicalLogEvent(BaseModel):
@@ -79,6 +94,7 @@ class BatchRecord(BaseModel):
     file_size_bytes: int
     total_events: int = 0
     matched_profile: Optional[str] = None
+    matched_profile_version: Optional[str] = None
     match_ratio: float = 0.0
     uploaded_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 

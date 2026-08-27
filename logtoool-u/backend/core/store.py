@@ -38,6 +38,7 @@ class BatchModel(Base):
     file_size_bytes = Column(Integer, nullable=False)
     total_events = Column(Integer, default=0)
     matched_profile = Column(String, nullable=True)
+    matched_profile_version = Column(String, nullable=True)
     match_ratio = Column(Float, default=0.0)
     uploaded_at = Column(String, nullable=False)
 
@@ -66,6 +67,7 @@ class EventModel(Base):
         Index("idx_events_component", "component"),
         Index("idx_events_batch_id", "batch_id"),
         Index("idx_events_file_name", "file_name"),
+        Index("idx_events_source_ts", "source_system", "ts_utc"),
     )
 
 
@@ -92,7 +94,25 @@ class DatabaseManager:
             conn.execute(text("PRAGMA foreign_keys = ON;"))
             conn.commit()
         Base.metadata.create_all(self.engine)
+        self._ensure_composite_indexes()
         logger.info(f"Database initialized at {self.db_path} with WAL mode enabled.")
+
+    def _ensure_composite_indexes(self) -> None:
+        """create_all() only creates missing TABLES, not missing indexes on
+        existing tables.  This adds any new composite indexes that were
+        introduced after the initial schema."""
+        with self.engine.connect() as conn:
+            existing = {row[1] for row in conn.execute(text("PRAGMA index_list(events)")).fetchall()}
+            if "idx_events_source_ts" not in existing:
+                conn.execute(text("CREATE INDEX IF NOT EXISTS idx_events_source_ts ON events(source_system, ts_utc)"))
+                conn.commit()
+                logger.info("Created composite index idx_events_source_ts on events(source_system, ts_utc).")
+
+            batch_cols = {row[1] for row in conn.execute(text("PRAGMA table_info(batches)")).fetchall()}
+            if "matched_profile_version" not in batch_cols:
+                conn.execute(text("ALTER TABLE batches ADD COLUMN matched_profile_version VARCHAR"))
+                conn.commit()
+                logger.info("Migrated batches table: added matched_profile_version column.")
 
     def insert_batch_and_events(
         self,
@@ -111,6 +131,7 @@ class DatabaseManager:
                 file_size_bytes=batch.file_size_bytes,
                 total_events=batch.total_events,
                 matched_profile=batch.matched_profile,
+                matched_profile_version=batch.matched_profile_version,
                 match_ratio=batch.match_ratio,
                 uploaded_at=batch.uploaded_at
             )
@@ -323,11 +344,34 @@ class DatabaseManager:
                     "file_size_bytes": b.file_size_bytes,
                     "total_events": b.total_events,
                     "matched_profile": b.matched_profile,
+                    "matched_profile_version": b.matched_profile_version,
                     "match_ratio": b.match_ratio,
                     "uploaded_at": b.uploaded_at
                 }
                 for b in batches
             ]
+        finally:
+            session.close()
+
+    def get_profile_versions_for_batches(self, batch_ids: List[str]) -> Dict[str, str]:
+        """Return {profile_name: profile_version} for the given batch IDs.
+        Used by the analysis pipeline to stamp parser provenance on
+        every response."""
+        if not batch_ids:
+            return {}
+        session = self.Session()
+        try:
+            rows = (
+                session.query(BatchModel.matched_profile, BatchModel.matched_profile_version)
+                .filter(BatchModel.batch_id.in_(batch_ids))
+                .distinct()
+                .all()
+            )
+            return {
+                row.matched_profile: row.matched_profile_version
+                for row in rows
+                if row.matched_profile
+            }
         finally:
             session.close()
 
