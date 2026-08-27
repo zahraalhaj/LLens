@@ -114,7 +114,12 @@ function AppShell() {
             )}
 
             {activeTab === 'explore' && (
-              <ExploreView sources={distinctSources} components={distinctComponents} onRefreshStats={fetchStats} />
+              <ExploreView
+                sources={distinctSources}
+                components={distinctComponents}
+                onRefreshStats={fetchStats}
+                isAdmin={user.role === 'admin'}
+              />
             )}
 
             {activeTab === 'stats' && <StatsView />}

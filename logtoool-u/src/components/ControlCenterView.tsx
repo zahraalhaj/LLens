@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   ServerCog, Plus, Trash2, Zap, RefreshCw, CheckCircle2, XCircle,
-  Clock, KeyRound, Lock, ChevronDown, ChevronUp, ShieldCheck, PauseCircle, PlayCircle,
+  Clock, KeyRound, Lock, ChevronDown, ChevronUp, ShieldCheck, PauseCircle, PlayCircle, AlertTriangle,
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { MachineAuthType, PollResult, RemoteMachine } from '../types';
@@ -32,6 +32,9 @@ export const ControlCenterView: React.FC = () => {
   const [busyMachineId, setBusyMachineId] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<Record<string, { type: 'test' | 'poll'; success: boolean; message: string; detail?: PollResult }>>({});
   const [expandedMachineId, setExpandedMachineId] = useState<string | null>(null);
+
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearMessage, setClearMessage] = useState<{ success: boolean; text: string } | null>(null);
 
   const loadMachines = async () => {
     try {
@@ -129,6 +132,27 @@ export const ControlCenterView: React.FC = () => {
       }));
     } finally {
       setBusyMachineId(null);
+    }
+  };
+
+  const handleClearEvents = async () => {
+    const confirmed = await confirm({
+      title: 'Clear all events?',
+      message: 'Permanently delete every ingested log event and batch across the entire system. This cannot be undone.',
+      confirmLabel: 'Clear all events',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    setClearMessage(null);
+    setIsClearing(true);
+    try {
+      await api.delete('/api/logs/clear');
+      setClearMessage({ success: true, text: 'All events cleared.' });
+    } catch (err) {
+      setClearMessage({ success: false, text: err instanceof ApiError ? err.detail : 'Failed to clear events' });
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -412,6 +436,38 @@ export const ControlCenterView: React.FC = () => {
           })}
         </div>
       )}
+
+      <div className="bg-white border border-rose-200 rounded-xl shadow-2xs p-5 space-y-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-rose-700">
+          <AlertTriangle className="w-4 h-4" />
+          Danger Zone
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500 max-w-xl">
+            Permanently delete every ingested log event and batch across the entire system -- registered
+            machines and their connection settings are unaffected. This cannot be undone.
+          </p>
+          <button
+            onClick={handleClearEvents}
+            disabled={isClearing}
+            className="flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 text-rose-700 text-xs font-bold rounded-lg border border-rose-200 transition-all cursor-pointer shrink-0"
+          >
+            <Trash2 className="w-4 h-4" />
+            {isClearing ? 'Clearing…' : 'Clear all events'}
+          </button>
+        </div>
+        {clearMessage && (
+          <div
+            className={`text-xs font-medium rounded-lg px-3.5 py-2.5 border ${
+              clearMessage.success
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-rose-50 text-rose-700 border-rose-200'
+            }`}
+          >
+            {clearMessage.text}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

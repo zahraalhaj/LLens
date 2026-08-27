@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Sparkles, ChevronLeft, ChevronRight, Eye, AlertCircle, FileCode, CheckCircle, ArrowUpRight } from 'lucide-react';
+import { Search, Filter, Sparkles, ChevronLeft, ChevronRight, Eye, AlertCircle, FileCode, CheckCircle, ArrowUpRight, Trash2 } from 'lucide-react';
 import { LogEvent, LogLevel, AIExplanation } from '../types';
 import { api, ApiError } from '../api';
+import { useConfirm } from './ConfirmDialog';
 
 interface ExploreViewProps {
   sources: string[];
   components: string[];
   onRefreshStats: () => void;
+  isAdmin: boolean;
 }
 
-export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, onRefreshStats }) => {
+export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, onRefreshStats, isAdmin }) => {
+  const confirm = useConfirm();
   const [events, setEvents] = useState<LogEvent[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
@@ -31,6 +34,10 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
   const [aiExplanation, setAiExplanation] = useState<AIExplanation | null>(null);
   const [isExplaining, setIsExplaining] = useState<boolean>(false);
   const [explainError, setExplainError] = useState<string | null>(null);
+
+  // Clear all events (admin-only, backend-enforced too)
+  const [isClearing, setIsClearing] = useState<boolean>(false);
+  const [clearError, setClearError] = useState<string | null>(null);
 
   const fetchEvents = async () => {
     try {
@@ -91,6 +98,31 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
     }
   };
 
+  const handleClearEvents = async () => {
+    const confirmed = await confirm({
+      title: 'Clear all events?',
+      message: 'Permanently delete every ingested log event and batch across the entire system. This cannot be undone.',
+      confirmLabel: 'Clear all events',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    setClearError(null);
+    setIsClearing(true);
+    try {
+      await api.delete('/api/logs/clear');
+      setSelectedEvent(null);
+      setContextEvents([]);
+      setPage(1);
+      await fetchEvents();
+      onRefreshStats();
+    } catch (err) {
+      setClearError(err instanceof ApiError ? err.detail : 'Failed to clear events');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   const getLevelBadge = (lvl: LogLevel) => {
     switch (lvl) {
       case 'CRITICAL':
@@ -117,10 +149,29 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
             <Filter className="w-4 h-4 text-slate-500" />
             <h2 className="text-sm font-bold text-slate-900">Log Event Explorer & Server-Side Search</h2>
           </div>
-          <div className="text-xs text-slate-500 font-medium">
-            Showing <strong className="text-slate-900">{events.length}</strong> of <strong className="text-slate-900">{totalCount.toLocaleString()}</strong> matching records
+          <div className="flex items-center gap-4">
+            <div className="text-xs text-slate-500 font-medium">
+              Showing <strong className="text-slate-900">{events.length}</strong> of <strong className="text-slate-900">{totalCount.toLocaleString()}</strong> matching records
+            </div>
+            {isAdmin && (
+              <button
+                onClick={handleClearEvents}
+                disabled={isClearing || totalCount === 0}
+                title="Permanently delete all ingested events"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 disabled:opacity-40 text-rose-700 text-xs font-bold rounded-lg border border-rose-200 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isClearing ? 'Clearing…' : 'Clear all events'}
+              </button>
+            )}
           </div>
         </div>
+
+        {clearError && (
+          <div className="text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3.5 py-2.5">
+            {clearError}
+          </div>
+        )}
 
         {/* Severity Level Filter Buttons */}
         <div className="flex flex-wrap items-center gap-2 pt-1">
