@@ -75,19 +75,55 @@ def test_extract_card_last4_returns_none_when_no_trailing_digits():
 # Dispatcher-level behavior
 # ---------------------------------------------------------------------------
 
-def test_unknown_source_system_returns_none():
+def test_unknown_source_system_returns_generic_event_not_none():
+    """A source_system with no registered family normalizer (a
+    declarative profile, or one of the 4 custom parsers outside the 5
+    named families) now gets a minimal LogFamily.GENERIC NormalizedEvent
+    instead of being dropped -- see normalize_event()'s docstring."""
     event = _base_event("some_declarative_profile_not_a_payment_family")
-    assert normalize_event(event) is None
+    result = normalize_event(event)
+    assert result is not None
+    assert result.log_family == LogFamily.GENERIC
 
 
-def test_normalize_events_skips_unregistered_sources_but_keeps_registered_ones():
+def test_normalize_events_keeps_both_generic_and_registered_sources():
     events = [
         _base_event("some_declarative_profile_not_a_payment_family"),
         _base_event(LogFamily.OTP_PROCESSOR.value),
     ]
     result = normalize_events(events)
-    assert len(result) == 1
-    assert result[0].log_family == LogFamily.OTP_PROCESSOR
+    assert len(result) == 2
+    families = {e.log_family for e in result}
+    assert families == {LogFamily.GENERIC, LogFamily.OTP_PROCESSOR}
+
+
+def test_generic_event_extracts_correlation_id_from_attributes():
+    """Every custom parser (including the 4 outside the 5 named families)
+    already writes attributes.correlation_id by convention -- the generic
+    fallback should pick that up for free, with no correlation_keys
+    configuration needed."""
+    event = _base_event(
+        "some_custom_parser_not_in_log_family",
+        attributes={"correlation_id": "TXN-GENERIC-1", "details": {}},
+    )
+    result = normalize_event(event)
+    assert result.extra_identifiers.get("correlation_id") == "TXN-GENERIC-1"
+
+
+def test_generic_event_extracts_declared_correlation_keys():
+    event = _base_event(
+        "some_declarative_profile",
+        attributes={"session_id": "SESS-1", "unrelated_field": "x"},
+    )
+    result = normalize_event(event, correlation_keys_by_source={"some_declarative_profile": ["session_id"]})
+    assert result.extra_identifiers.get("session_id") == "SESS-1"
+    assert "unrelated_field" not in result.extra_identifiers
+
+
+def test_generic_event_with_no_correlation_signal_has_empty_extra_identifiers():
+    event = _base_event("some_declarative_profile", attributes={})
+    result = normalize_event(event)
+    assert result.extra_identifiers == {}
 
 
 def test_dispatcher_never_raises_on_malformed_details_shape():

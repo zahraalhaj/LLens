@@ -426,6 +426,229 @@ def test_digest_mode_uses_highest_severity_window_among_batched_events(rule_mana
     assert len(triggered) == 1
 
 
+# ---------------------------------------------------------------------------
+# Anomaly-triggered rules (evaluate_anomaly_rules, backed by
+# core/profiling.py's z-score report rather than per-event matching)
+# ---------------------------------------------------------------------------
+
+
+def _fake_report(flagged_components=None, flagged_hours=None):
+    return {
+        "method": "heuristic_zscore",
+        "description": "test",
+        "total_events": 100,
+        "error_ratio": 0.1,
+        "flagged_components": flagged_components or [],
+        "flagged_hours": flagged_hours or [],
+    }
+
+
+def test_anomaly_rule_dispatches_on_flagged_component(rule_manager, processor, monkeypatch):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="anomaly-watch", min_level="ERROR", mode="immediate", trigger_type="anomaly")
+
+    monkeypatch.setattr(
+        "backend.alerts.rules.compute_anomaly_report",
+        lambda db: _fake_report(flagged_components=[{"name": "payments-db", "count": 42, "z_score": 2.5}]),
+    )
+
+    triggered = processor.evaluate_anomaly_rules(db=object())  # db is only forwarded to the monkeypatched function
+    assert len(triggered) == 1
+    assert triggered[0]["kind"] == "component"
+    assert triggered[0]["name"] == "payments-db"
+
+    history = processor.get_dispatch_history()
+    assert history["entries"][0]["rule_name"] == "anomaly-watch"
+
+
+def test_anomaly_rule_skips_computation_when_none_enabled(rule_manager, processor, monkeypatch):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="severity-only", min_level="ERROR", mode="immediate")  # trigger_type defaults to "severity"
+
+    called = {"count": 0}
+
+    def _spy(db):
+        called["count"] += 1
+        return _fake_report()
+
+    monkeypatch.setattr("backend.alerts.rules.compute_anomaly_report", _spy)
+    triggered = processor.evaluate_anomaly_rules(db=object())
+    assert triggered == []
+    assert called["count"] == 0  # early-return before ever computing the report
+
+
+def test_anomaly_rule_ignored_by_severity_evaluation(rule_manager, processor):
+    """An anomaly-triggered rule must not also fire from ordinary
+    per-event severity matching -- it's evaluated exclusively via
+    evaluate_anomaly_rules."""
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="anomaly-watch", min_level="ERROR", mode="immediate", trigger_type="anomaly")
+
+    triggered = processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL")])
+    assert triggered == []
+
+
+def test_anomaly_rule_dedup_suppresses_repeat_flag(rule_manager, processor, monkeypatch):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(
+        name="anomaly-watch", min_level="ERROR", mode="immediate", trigger_type="anomaly", dedup_window_minutes=60,
+    )
+    monkeypatch.setattr(
+        "backend.alerts.rules.compute_anomaly_report",
+        lambda db: _fake_report(flagged_components=[{"name": "payments-db", "count": 42, "z_score": 2.5}]),
+    )
+
+    first = processor.evaluate_anomaly_rules(db=object())
+    second = processor.evaluate_anomaly_rules(db=object())  # same flagged component, still within the window
+    assert len(first) == 1
+    assert len(second) == 0
+
+
+# ---------------------------------------------------------------------------
+# Alert lifecycle: firing -> acknowledged -> resolved (AlertDedupStateModel
+# doubles as the active-alert record -- see state.py)
+# ---------------------------------------------------------------------------
+
+
+def test_new_signature_starts_firing_and_appears_in_active_list(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="critical-now", min_level="CRITICAL", mode="immediate")
+
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL", message="db down")])
+    active = processor.dedup_engine.list_active_alerts()
+    assert len(active) == 1
+    assert active[0]["status"] == "firing"
+    assert active[0]["rule_name"] == "critical-now"
+
+
+def test_acknowledge_then_resolve_transitions(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="critical-now", min_level="CRITICAL", mode="immediate")
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL", message="db down")])
+    dedup_key = processor.dedup_engine.list_active_alerts()[0]["dedup_key"]
+
+    acked = processor.dedup_engine.acknowledge(dedup_key, user_id="user-1")
+    assert acked["status"] == "acknowledged"
+    assert acked["acknowledged_by_user_id"] == "user-1"
+
+    resolved = processor.dedup_engine.resolve(dedup_key, user_id="user-1")
+    assert resolved["status"] == "resolved"
+    assert resolved["resolved_at"] is not None
+
+
+def test_resolved_alerts_excluded_from_default_active_list(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="critical-now", min_level="CRITICAL", mode="immediate")
+    processor.evaluate_batch_alerts("batch-1", [make_event(level="CRITICAL", message="db down")])
+    dedup_key = processor.dedup_engine.list_active_alerts()[0]["dedup_key"]
+
+    processor.dedup_engine.resolve(dedup_key, user_id="user-1")
+    assert processor.dedup_engine.list_active_alerts() == []  # excluded by default
+    assert len(processor.dedup_engine.list_active_alerts(status_filter="resolved")) == 1  # still queryable explicitly
+
+
+def test_resolved_alert_reopens_to_firing_on_recurrence(rule_manager, processor):
+    for r in rule_manager.list_rules():
+        rule_manager.delete_rule(r["rule_id"])
+    rule_manager.create_rule(name="critical-now", min_level="CRITICAL", mode="immediate", dedup_window_minutes=0)
+    event = make_event(level="CRITICAL", message="db down again")
+
+    processor.evaluate_batch_alerts("batch-1", [event])
+    dedup_key = processor.dedup_engine.list_active_alerts()[0]["dedup_key"]
+    processor.dedup_engine.resolve(dedup_key, user_id="user-1")
+    assert processor.dedup_engine.list_active_alerts() == []
+
+    processor.evaluate_batch_alerts("batch-2", [event])  # window is 0 -- fires again immediately
+    active = processor.dedup_engine.list_active_alerts()
+    assert len(active) == 1
+    assert active[0]["dedup_key"] == dedup_key  # same signature, reopened -- not a new row
+    assert active[0]["status"] == "firing"
+    assert active[0]["resolved_at"] is None
+
+
+def test_acknowledge_unknown_dedup_key_raises(processor):
+    from backend.alerts.state import ActiveAlertNotFoundError
+    with pytest.raises(ActiveAlertNotFoundError):
+        processor.dedup_engine.acknowledge("does-not-exist", user_id="user-1")
+
+
+def test_migration_adds_lifecycle_columns_to_pre_existing_table(tmp_path):
+    """A database created before the firing/acknowledged/resolved
+    lifecycle existed must still work -- same _ensure_*_column migration
+    pattern used throughout this package."""
+    from sqlalchemy import create_engine, text
+    from backend.alerts.state import AlertDeduplicationEngine
+
+    db_path = str(tmp_path / "old_schema.db")
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE alert_dedup_state (
+                    dedup_key VARCHAR PRIMARY KEY,
+                    last_fired_at VARCHAR NOT NULL
+                )
+                """
+            )
+        )
+        conn.commit()
+    engine.dispose()
+
+    dedup = AlertDeduplicationEngine(db_path=db_path)  # must not raise
+    assert dedup.should_fire_alert("rule-x", "svc", "comp", "msg", window_minutes=60, rule_name="rule-x") is True
+    active = dedup.list_active_alerts()
+    assert len(active) == 1
+    assert active[0]["status"] == "firing"
+
+
+def test_migration_adds_trigger_type_column_to_pre_existing_table(tmp_path):
+    """A database created before trigger_type existed must still work --
+    same _ensure_*_column migration pattern as the notification-columns
+    migration test above."""
+    from sqlalchemy import create_engine, text
+
+    db_path = str(tmp_path / "old_schema.db")
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE alert_rules (
+                    rule_id VARCHAR PRIMARY KEY,
+                    name VARCHAR NOT NULL UNIQUE,
+                    enabled INTEGER NOT NULL,
+                    min_level VARCHAR NOT NULL,
+                    source_system_filter VARCHAR,
+                    component_filter VARCHAR,
+                    message_contains VARCHAR,
+                    mode VARCHAR NOT NULL,
+                    dedup_window_minutes INTEGER NOT NULL,
+                    recipients VARCHAR,
+                    notification_group_id VARCHAR,
+                    dedup_windows_json TEXT,
+                    created_at VARCHAR NOT NULL,
+                    updated_at VARCHAR NOT NULL,
+                    created_by_user_id VARCHAR
+                )
+                """
+            )
+        )
+        conn.commit()
+    engine.dispose()
+
+    manager = AlertRuleManager(db_path=db_path)  # must not raise
+    rule = manager.create_rule(name="post-migration", min_level="ERROR", mode="immediate")
+    assert rule["trigger_type"] == "severity"
+
+
 def test_migration_adds_notification_columns_to_pre_existing_table(tmp_path):
     """A database created before notification_group_id/dedup_windows_json
     existed must still work -- AlertRuleManager.__init__'s

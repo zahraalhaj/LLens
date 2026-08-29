@@ -1,8 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, Sparkles, ChevronLeft, ChevronRight, Eye, AlertCircle, FileCode, CheckCircle, ArrowUpRight, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Filter, Sparkles, ChevronLeft, ChevronRight, Eye, AlertCircle, FileCode, CheckCircle, ArrowUpRight, Trash2, Radio, Bookmark, BookmarkPlus, X, Download } from 'lucide-react';
 import { LogEvent, LogLevel, AIExplanation } from '../types';
 import { api, ApiError } from '../api';
 import { useConfirm } from './ConfirmDialog';
+import { useUrlState } from '../hooks/useUrlState';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+
+interface SavedSearch {
+  id: string;
+  name: string;
+  level: string;
+  source: string;
+  component: string;
+  q: string;
+}
 
 interface ExploreViewProps {
   sources: string[];
@@ -19,11 +30,26 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
   const [pageSize] = useState<number>(50);
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
-  // Filters
-  const [selectedLevel, setSelectedLevel] = useState<string>('ALL');
-  const [selectedSource, setSelectedSource] = useState<string>('ALL');
-  const [selectedComponent, setSelectedComponent] = useState<string>('ALL');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  // Filters -- URL-synced (see useUrlState) so the current filter set
+  // survives a reload and can be shared by pasting the link.
+  const [selectedLevel, setSelectedLevel] = useUrlState('level', 'ALL');
+  const [selectedSource, setSelectedSource] = useUrlState('source', 'ALL');
+  const [selectedComponent, setSelectedComponent] = useUrlState('component', 'ALL');
+  const [searchTerm, setSearchTerm] = useUrlState('q', '');
+
+  // Saved searches: named filter presets kept in localStorage (no backend
+  // table needed -- this is a per-browser convenience, not shared state).
+  const [savedSearches, setSavedSearches] = useLocalStorage<SavedSearch[]>('llens.savedSearches', []);
+  const [showSavedSearches, setShowSavedSearches] = useState(false);
+
+  // Live tail: polls page 1 on an interval instead of fetching once per
+  // filter/page change. Only meaningful on page 1 (newest-first), so
+  // enabling it forces the page back there and pagination is disabled
+  // while it's on -- otherwise a poll landing mid-read would yank the
+  // page out from under whatever the user was looking at.
+  const [isLive, setIsLive] = useState<boolean>(false);
+  const LIVE_POLL_MS = 8000;
+  const inFlightRequest = useRef<AbortController | null>(null);
 
   // Selected event inspection
   const [selectedEvent, setSelectedEvent] = useState<LogEvent | null>(null);
@@ -40,6 +66,13 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
   const [clearError, setClearError] = useState<string | null>(null);
 
   const fetchEvents = async () => {
+    // Cancel whatever's still in flight -- without this, a slow request
+    // (e.g. from a live-poll tick) can resolve AFTER a newer one and
+    // clobber its results with stale data.
+    inFlightRequest.current?.abort();
+    const controller = new AbortController();
+    inFlightRequest.current = controller;
+
     try {
       const params = new URLSearchParams({ page: page.toString(), pageSize: pageSize.toString() });
       if (selectedLevel !== 'ALL') params.set('level', selectedLevel);
@@ -47,10 +80,13 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
       if (selectedComponent !== 'ALL') params.set('component', selectedComponent);
       if (searchTerm) params.set('search_term', searchTerm);
 
-      const data = await api.get<{ events: LogEvent[]; total: number }>(`/api/logs/events?${params}`);
+      const data = await api.get<{ events: LogEvent[]; total: number }>(`/api/logs/events?${params}`, {
+        signal: controller.signal,
+      });
       setEvents(data.events || []);
       setTotalCount(data.total || 0);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return; // superseded by a newer request
       console.error('Failed to fetch events:', err);
     }
   };
@@ -58,6 +94,24 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
   useEffect(() => {
     fetchEvents();
   }, [page, selectedLevel, selectedSource, selectedComponent, searchTerm]);
+
+  useEffect(() => {
+    if (!isLive) return;
+    const interval = setInterval(fetchEvents, LIVE_POLL_MS);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally
+    // re-reads fetchEvents' latest closure each tick rather than depending
+    // on every filter individually; the effect above already re-fetches on
+    // any filter change, this one only adds the interval on top.
+  }, [isLive, page, selectedLevel, selectedSource, selectedComponent, searchTerm]);
+
+  const toggleLive = () => {
+    setIsLive((prev) => {
+      const next = !prev;
+      if (next && page !== 1) setPage(1);
+      return next;
+    });
+  };
 
   const handleSelectEvent = async (evt: LogEvent) => {
     setSelectedEvent(evt);
@@ -96,6 +150,51 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
     } finally {
       setIsExplaining(false);
     }
+  };
+
+  // Matches backend/api/routes/logs.py's EXPORT_MAX_ROWS -- used only to
+  // show a "narrow your filters" notice before exporting, since the
+  // backend can't hand that information back through a plain downloaded
+  // file the same way it can an API response.
+  const EXPORT_MAX_ROWS = 5000;
+
+  const handleExport = (format: 'csv' | 'json') => {
+    const params = new URLSearchParams({ format });
+    if (selectedLevel !== 'ALL') params.set('level', selectedLevel);
+    if (selectedSource !== 'ALL') params.set('source_system', selectedSource);
+    if (selectedComponent !== 'ALL') params.set('component', selectedComponent);
+    if (searchTerm) params.set('search_term', searchTerm);
+    // Content-Disposition: attachment means the browser downloads the
+    // response instead of navigating away -- no need for a JS fetch/Blob
+    // dance, and the session cookie rides along automatically.
+    window.location.href = `/api/logs/events/export?${params}`;
+  };
+
+  const handleSaveSearch = () => {
+    const name = window.prompt('Name this search:');
+    if (!name) return;
+    const entry: SavedSearch = {
+      id: `${Date.now()}`,
+      name,
+      level: selectedLevel,
+      source: selectedSource,
+      component: selectedComponent,
+      q: searchTerm,
+    };
+    setSavedSearches((prev) => [...prev, entry]);
+  };
+
+  const applySavedSearch = (s: SavedSearch) => {
+    setSelectedLevel(s.level);
+    setSelectedSource(s.source);
+    setSelectedComponent(s.component);
+    setSearchTerm(s.q);
+    setPage(1);
+    setShowSavedSearches(false);
+  };
+
+  const deleteSavedSearch = (id: string) => {
+    setSavedSearches((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleClearEvents = async () => {
@@ -153,6 +252,81 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
             <div className="text-xs text-slate-500 font-medium">
               Showing <strong className="text-slate-900">{events.length}</strong> of <strong className="text-slate-900">{totalCount.toLocaleString()}</strong> matching records
             </div>
+            <button
+              onClick={toggleLive}
+              title={isLive ? 'Stop auto-refreshing' : 'Auto-refresh page 1 every 8s'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                isLive
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {isLive ? (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse motion-reduce:animate-none" />
+              ) : (
+                <Radio className="w-3.5 h-3.5" />
+              )}
+              {isLive ? 'Live' : 'Go live'}
+            </button>
+            <button
+              onClick={handleSaveSearch}
+              title="Save the current filters as a named search"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition-all cursor-pointer"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5" />
+              Save search
+            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowSavedSearches((v) => !v)}
+                title="Saved searches"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition-all cursor-pointer"
+              >
+                <Bookmark className="w-3.5 h-3.5" />
+                Saved ({savedSearches.length})
+              </button>
+              {showSavedSearches && (
+                <div className="absolute right-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-20 py-1 max-h-64 overflow-y-auto">
+                  {savedSearches.length === 0 ? (
+                    <div className="px-3 py-2.5 text-xs text-slate-400 italic">No saved searches yet.</div>
+                  ) : (
+                    savedSearches.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between px-3 py-1.5 hover:bg-slate-50 group">
+                        <button
+                          onClick={() => applySavedSearch(s)}
+                          className="text-xs text-slate-700 font-medium text-left flex-1 truncate cursor-pointer"
+                        >
+                          {s.name}
+                        </button>
+                        <button
+                          onClick={() => deleteSavedSearch(s.id)}
+                          title="Delete"
+                          className="text-slate-300 group-hover:text-rose-500 cursor-pointer p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => handleExport('csv')}
+              title="Export the current filtered results as CSV"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition-all cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+            <button
+              onClick={() => handleExport('json')}
+              title="Export the current filtered results as JSON"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition-all cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              JSON
+            </button>
             {isAdmin && (
               <button
                 onClick={handleClearEvents}
@@ -170,6 +344,13 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
         {clearError && (
           <div className="text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3.5 py-2.5">
             {clearError}
+          </div>
+        )}
+
+        {totalCount > EXPORT_MAX_ROWS && (
+          <div className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3.5 py-2.5">
+            Exporting will include the first {EXPORT_MAX_ROWS.toLocaleString()} of {totalCount.toLocaleString()} matching
+            records -- narrow your filters to export everything.
           </div>
         )}
 
@@ -226,13 +407,16 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search error, exception, IP address..."
+                placeholder='level:ERROR source:cardinal "exact phrase" timeout'
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                 className="w-full text-xs bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-2 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
             </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Combine free text with <code className="font-mono">level:</code>/<code className="font-mono">source:</code>/<code className="font-mono">component:</code> and "quoted phrases".
+            </p>
           </div>
         </div>
       </div>
@@ -309,22 +493,26 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
               <div>
                 Page <strong className="text-slate-900">{page}</strong> of <strong className="text-slate-900">{totalPages}</strong>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded font-bold text-slate-700 transition-all cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded font-bold text-slate-700 transition-all cursor-pointer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              {isLive ? (
+                <div className="text-[11px] text-emerald-700 font-semibold">Pagination paused while Live</div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded font-bold text-slate-700 transition-all cursor-pointer"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-100 disabled:opacity-40 border border-slate-200 rounded font-bold text-slate-700 transition-all cursor-pointer"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

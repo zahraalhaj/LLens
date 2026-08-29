@@ -21,7 +21,14 @@ from pydantic import BaseModel
 
 from backend.analysis.pipeline import ALL_PAYMENT_FAMILIES, ENGINE_VERSION, run_analysis_pipeline
 from backend.api.date_range import resolve_date_range
-from backend.api.deps import get_ai_analyst_assistant, get_ai_analyst_audit_log, get_current_user, get_db, require_admin
+from backend.api.deps import (
+    get_ai_analyst_assistant,
+    get_ai_analyst_audit_log,
+    get_current_user,
+    get_db,
+    get_profile_manager,
+    require_admin,
+)
 from backend.auth.service import AuthenticatedUser
 from backend.core.store import DatabaseManager
 from backend.llm.ai_analyst import AIAnalystAssistant
@@ -46,7 +53,7 @@ async def ask(
     audit_log: AIAnalystAuditLog = Depends(get_ai_analyst_audit_log),
 ):
     resolved_from, resolved_to = resolve_date_range(lookback_hours, date_from, date_to)
-    bundle = run_analysis_pipeline(db, date_from=resolved_from, date_to=resolved_to)
+    bundle = run_analysis_pipeline(db, date_from=resolved_from, date_to=resolved_to, profile_manager=get_profile_manager())
 
     # Run the Ollama LLM calls in a dedicated thread so that slow
     # inference (tool selection + narration) does not block FastAPI's

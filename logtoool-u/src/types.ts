@@ -29,6 +29,7 @@ export interface ParserProfile {
   min_match_ratio: number;
   level_map?: Record<string, string> | null;
   delimiter_fields?: string[] | null;
+  correlation_keys?: string[] | null;
 }
 
 export interface LogEvent {
@@ -112,6 +113,7 @@ export interface AlertRule {
   rule_id: string;
   name: string;
   enabled: boolean;
+  trigger_type: 'severity' | 'anomaly';
   min_level: string;
   source_system_filter: string | null;
   component_filter: string | null;
@@ -131,6 +133,24 @@ export interface NotificationGroup {
   emails: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface ActiveAlert {
+  dedup_key: string;
+  status: 'firing' | 'acknowledged' | 'resolved';
+  rule_id: string | null;
+  rule_name: string | null;
+  source_system: string | null;
+  component: string | null;
+  message_snippet: string | null;
+  correlation_field: string | null;
+  correlation_value: string | null;
+  last_fired_at: string;
+  first_fired_at: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by_user_id: string | null;
+  resolved_at: string | null;
+  resolved_by_user_id: string | null;
 }
 
 export interface AlertDispatchLogEntry {

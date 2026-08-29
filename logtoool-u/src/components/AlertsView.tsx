@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   BellRing, Send, Mail, CheckCircle2, XCircle, Info, History, Filter, ExternalLink,
-  Users, Plus, Pencil, Trash2, Power, X,
+  Users, Plus, Pencil, Trash2, Power, X, Siren, Check, CircleCheckBig,
 } from 'lucide-react';
-import { AlertRule, AlertDispatchHistory, DrillThroughTarget, NotificationGroup } from '../types';
+import { AlertRule, AlertDispatchHistory, ActiveAlert, DrillThroughTarget, NotificationGroup } from '../types';
 import { api, ApiError } from '../api';
 import { useConfirm } from './ConfirmDialog';
 
@@ -20,8 +20,16 @@ const severitiesFrom = (minLevel: string): string[] => {
   return idx === -1 ? SEVERITY_ORDER : SEVERITY_ORDER.slice(idx);
 };
 
+// Anomaly-triggered rules ignore min_level entirely -- evaluate_anomaly_rules
+// (backend/alerts/rules.py) derives WARN/ERROR itself from the z-score
+// magnitude of each flagged component/hour, so the dedup-window inputs for
+// an anomaly rule always cover exactly these two severities, regardless of
+// the (hidden, unused) min_level field.
+const ANOMALY_DEDUP_SEVERITIES = ['WARN', 'ERROR'];
+
 const emptyRuleForm = {
   name: '',
+  trigger_type: 'severity' as 'severity' | 'anomaly',
   min_level: 'ERROR',
   mode: 'immediate' as 'immediate' | 'digest',
   source_system_filter: '',
@@ -191,10 +199,13 @@ const RuleForm: React.FC<{
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const dedupSeverities = form.trigger_type === 'anomaly' ? ANOMALY_DEDUP_SEVERITIES : severitiesFrom(form.min_level);
+
   useEffect(() => {
     if (editingRule) {
       setForm({
         name: editingRule.name,
+        trigger_type: editingRule.trigger_type || 'severity',
         min_level: editingRule.min_level,
         mode: editingRule.mode,
         source_system_filter: editingRule.source_system_filter || '',
@@ -204,8 +215,9 @@ const RuleForm: React.FC<{
         notification_group_id: editingRule.notification_group_id || '',
         recipients: editingRule.recipients || '',
       });
+      const severities = editingRule.trigger_type === 'anomaly' ? ANOMALY_DEDUP_SEVERITIES : severitiesFrom(editingRule.min_level);
       const base: Record<string, number> = {};
-      severitiesFrom(editingRule.min_level).forEach((s) => {
+      severities.forEach((s) => {
         base[s] = editingRule.dedup_windows?.[s] ?? editingRule.dedup_window_minutes;
       });
       setWindows(base);
@@ -216,6 +228,16 @@ const RuleForm: React.FC<{
       setWindows(base);
     }
   }, [editingRule]);
+
+  const updateTriggerType = (triggerType: 'severity' | 'anomaly') => {
+    setForm((f) => ({ ...f, trigger_type: triggerType }));
+    const severities = triggerType === 'anomaly' ? ANOMALY_DEDUP_SEVERITIES : severitiesFrom(form.min_level);
+    setWindows((prev) => {
+      const next: Record<string, number> = {};
+      severities.forEach((s) => (next[s] = prev[s] ?? form.dedup_window_minutes));
+      return next;
+    });
+  };
 
   const updateMinLevel = (level: string) => {
     setForm((f) => ({ ...f, min_level: level }));
@@ -232,6 +254,7 @@ const RuleForm: React.FC<{
     setError(null);
     const payload = {
       name: form.name,
+      trigger_type: form.trigger_type,
       min_level: form.min_level,
       mode: form.mode,
       source_system_filter: form.source_system_filter || null,
@@ -277,53 +300,74 @@ const RuleForm: React.FC<{
           />
         </div>
         <div>
-          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Fires on (min. severity)</label>
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Trigger</label>
           <select
-            value={form.min_level}
-            onChange={(e) => updateMinLevel(e.target.value)}
+            value={form.trigger_type}
+            onChange={(e) => updateTriggerType(e.target.value as 'severity' | 'anomaly')}
             className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {SEVERITY_ORDER.map((s) => (
-              <option key={s} value={s}>{s}+</option>
-            ))}
+            <option value="severity">Severity threshold</option>
+            <option value="anomaly">Statistical anomaly</option>
           </select>
         </div>
-        <div>
-          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Mode</label>
+        {form.trigger_type === 'severity' && (
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Fires on (min. severity)</label>
+            <select
+              value={form.min_level}
+              onChange={(e) => updateMinLevel(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {SEVERITY_ORDER.map((s) => (
+                <option key={s} value={s}>{s}+</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {form.trigger_type === 'anomaly' ? (
+        <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3.5 py-2.5 text-xs text-blue-900">
+          <Info className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            Fires when the statistical outlier detector (see <strong>Anomaly Insights</strong>) flags a component's
+            error count or an hour's event volume as more than 2 standard deviations above normal. Severity and
+            source/component/message filters don't apply to this trigger type -- only the dedup windows below do.
+          </span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select
             value={form.mode}
             onChange={(e) => setForm({ ...form, mode: e.target.value as 'immediate' | 'digest' })}
-            className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="immediate">Immediate -- one email per event</option>
             <option value="digest">Digest -- one summary per batch</option>
           </select>
+          <input
+            type="text"
+            placeholder="Source system contains (optional)"
+            value={form.source_system_filter}
+            onChange={(e) => setForm({ ...form, source_system_filter: e.target.value })}
+            className="px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            placeholder="Component contains (optional)"
+            value={form.component_filter}
+            onChange={(e) => setForm({ ...form, component_filter: e.target.value })}
+            className="px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            placeholder="Message contains (optional)"
+            value={form.message_contains}
+            onChange={(e) => setForm({ ...form, message_contains: e.target.value })}
+            className="px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <input
-          type="text"
-          placeholder="Source system contains (optional)"
-          value={form.source_system_filter}
-          onChange={(e) => setForm({ ...form, source_system_filter: e.target.value })}
-          className="px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          type="text"
-          placeholder="Component contains (optional)"
-          value={form.component_filter}
-          onChange={(e) => setForm({ ...form, component_filter: e.target.value })}
-          className="px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <input
-          type="text"
-          placeholder="Message contains (optional)"
-          value={form.message_contains}
-          onChange={(e) => setForm({ ...form, message_contains: e.target.value })}
-          className="px-3 py-2 text-xs border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
@@ -359,7 +403,7 @@ const RuleForm: React.FC<{
           Suppress repeats for, by severity of the triggering event (minutes)
         </label>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-          {severitiesFrom(form.min_level).map((s) => (
+          {dedupSeverities.map((s) => (
             <div key={s}>
               <div className="text-[10px] font-bold text-slate-500 mb-0.5">{s}</div>
               <input
@@ -395,6 +439,9 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ onInvestigate, isAdmin }
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [groups, setGroups] = useState<NotificationGroup[]>([]);
   const [history, setHistory] = useState<AlertDispatchHistory | null>(null);
+  const [activeAlerts, setActiveAlerts] = useState<ActiveAlert[] | null>(null);
+  const [showResolved, setShowResolved] = useState(false);
+  const [transitioningKey, setTransitioningKey] = useState<string | null>(null);
   const [isSending, setIsSending] = useState<boolean>(false);
   const [testResult, setTestResult] = useState<{ success: boolean; status: string } | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -427,11 +474,59 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ onInvestigate, isAdmin }
     }
   };
 
+  // /api/alerts/active excludes resolved alerts by default; "show
+  // resolved" fetches them separately (status=resolved) and merges them
+  // in, rather than the default view paying for a bigger response.
+  const fetchActiveAlerts = async (includeResolved: boolean) => {
+    try {
+      const data = await api.get<ActiveAlert[]>('/api/alerts/active');
+      if (includeResolved) {
+        const resolved = await api.get<ActiveAlert[]>('/api/alerts/active?status=resolved');
+        setActiveAlerts([...data, ...resolved]);
+      } else {
+        setActiveAlerts(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch active alerts:', err);
+    }
+  };
+
   useEffect(() => {
     fetchRules();
     fetchGroups();
     fetchHistory();
+    fetchActiveAlerts(showResolved);
   }, []);
+
+  const handleAcknowledge = async (alert: ActiveAlert) => {
+    setTransitioningKey(alert.dedup_key);
+    try {
+      await api.post(`/api/alerts/active/${alert.dedup_key}/acknowledge`, {});
+      await fetchActiveAlerts(showResolved);
+    } catch (err) {
+      console.error('Failed to acknowledge alert:', err);
+    } finally {
+      setTransitioningKey(null);
+    }
+  };
+
+  const handleResolve = async (alert: ActiveAlert) => {
+    setTransitioningKey(alert.dedup_key);
+    try {
+      await api.post(`/api/alerts/active/${alert.dedup_key}/resolve`, {});
+      await fetchActiveAlerts(showResolved);
+    } catch (err) {
+      console.error('Failed to resolve alert:', err);
+    } finally {
+      setTransitioningKey(null);
+    }
+  };
+
+  const toggleShowResolved = () => {
+    const next = !showResolved;
+    setShowResolved(next);
+    fetchActiveAlerts(next);
+  };
 
   const handleTestAlert = async () => {
     setIsSending(true);
@@ -553,15 +648,24 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ onInvestigate, isAdmin }
                   )}
                 </div>
               </div>
-              <div className="text-xs text-slate-600 leading-relaxed">
-                Fires on <strong>{rule.min_level}+</strong> events, <strong>{rule.mode === 'immediate' ? 'one email per event' : 'one digest per batch'}</strong>.
-                Suppresses repeats for {rule.dedup_window_minutes}m
-                {rule.dedup_windows && Object.keys(rule.dedup_windows).length > 0 && ' (varies by severity)'}.
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                <Filter className="w-3 h-3" />
-                {describeFilters(rule)}
-              </div>
+              {rule.trigger_type === 'anomaly' ? (
+                <div className="text-xs text-slate-600 leading-relaxed">
+                  Fires on <strong>statistical anomalies</strong> (see Anomaly Insights). Suppresses repeats for {rule.dedup_window_minutes}m
+                  {rule.dedup_windows && Object.keys(rule.dedup_windows).length > 0 && ' (varies by severity)'}.
+                </div>
+              ) : (
+                <>
+                  <div className="text-xs text-slate-600 leading-relaxed">
+                    Fires on <strong>{rule.min_level}+</strong> events, <strong>{rule.mode === 'immediate' ? 'one email per event' : 'one digest per batch'}</strong>.
+                    Suppresses repeats for {rule.dedup_window_minutes}m
+                    {rule.dedup_windows && Object.keys(rule.dedup_windows).length > 0 && ' (varies by severity)'}.
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <Filter className="w-3 h-3" />
+                    {describeFilters(rule)}
+                  </div>
+                </>
+              )}
               {rule.notification_group_id ? (
                 <div className="text-[11px] text-slate-500">
                   → group: <span className="font-semibold">{groupById[rule.notification_group_id]?.name || 'unknown group'}</span>
@@ -612,6 +716,110 @@ export const AlertsView: React.FC<AlertsViewProps> = ({ onInvestigate, isAdmin }
       </div>
 
       {isAdmin && <NotificationGroupsPanel groups={groups} onChanged={fetchGroups} />}
+
+      <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 font-bold text-xs text-slate-800 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Siren className="w-4 h-4 text-rose-500" />
+            Active Alerts
+          </span>
+          <label className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500 normal-case cursor-pointer">
+            <input type="checkbox" checked={showResolved} onChange={toggleShowResolved} className="cursor-pointer" />
+            Show resolved
+          </label>
+        </div>
+        {activeAlerts === null ? (
+          <div className="px-5 py-6 text-center text-xs text-slate-400 italic">Loading…</div>
+        ) : activeAlerts.length === 0 ? (
+          <div className="px-5 py-6 text-center text-xs text-slate-400 italic">
+            No active alerts -- nothing firing right now.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5">Rule</th>
+                  <th className="px-4 py-2.5">Source / Component</th>
+                  <th className="px-4 py-2.5">Last fired</th>
+                  <th className="px-4 py-2.5">Investigation</th>
+                  <th className="px-4 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-slate-800 font-medium">
+                {activeAlerts.map((alert) => {
+                  const busy = transitioningKey === alert.dedup_key;
+                  return (
+                    <tr key={alert.dedup_key} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                            alert.status === 'firing'
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : alert.status === 'acknowledged'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          }`}
+                        >
+                          {alert.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 font-bold">{alert.rule_name || '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {alert.source_system || '—'}
+                        {alert.component ? ` / ${alert.component}` : ''}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[11px] text-slate-500">
+                        {alert.last_fired_at?.slice(0, 19).replace('T', ' ')}
+                      </td>
+                      <td className="px-4 py-3">
+                        {alert.correlation_field && alert.correlation_value ? (
+                          <button
+                            onClick={() => onInvestigate({ kind: alert.correlation_field as any, value: alert.correlation_value as string })}
+                            className="flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-500 cursor-pointer"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            View
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {alert.status === 'firing' && (
+                            <button
+                              onClick={() => handleAcknowledge(alert)}
+                              disabled={busy}
+                              title="Acknowledge"
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-40 rounded-md border border-amber-200 cursor-pointer"
+                            >
+                              <Check className="w-3 h-3" />
+                              Ack
+                            </button>
+                          )}
+                          {alert.status !== 'resolved' && (
+                            <button
+                              onClick={() => handleResolve(alert)}
+                              disabled={busy}
+                              title="Resolve"
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 rounded-md border border-emerald-200 cursor-pointer"
+                            >
+                              <CircleCheckBig className="w-3 h-3" />
+                              Resolve
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 font-bold text-xs text-slate-800 flex items-center gap-2">

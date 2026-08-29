@@ -40,6 +40,7 @@ from backend.api.routes import (
     vplus_monitoring,
 )
 from backend.analysis.vplus_alerting import VPlusAvailabilityMonitor, register_vplus_availability_job
+from backend.core.retention import register_retention_purge_job
 from backend.remote import crypto as remote_crypto
 from backend.remote.scheduler import start_scheduler
 
@@ -89,6 +90,14 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception(
             "Failed to register V+ availability monitor -- V+ down/recovered alerting disabled, "
+            "everything else works normally."
+        )
+
+    try:
+        register_retention_purge_job(_scheduler, get_db(), settings)
+    except Exception:
+        logger.exception(
+            "Failed to register retention purge job -- automatic data retention disabled, "
             "everything else works normally."
         )
 

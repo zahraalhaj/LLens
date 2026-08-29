@@ -57,6 +57,18 @@ class ParserProfile(BaseModel):
     delimiter_fields: Optional[List[str]] = None  # For delimited format: header list if file lacks headers
     custom_parser_module: Optional[str] = None  # For type=CUSTOM: key into backend.core.custom_parser_registry
 
+    # Names, in priority order, of this profile's own extracted `attributes`
+    # keys (regex named groups / JSON field paths / delimiter field names)
+    # that identify a real-world transaction/session -- lets a declarative
+    # profile's events participate in cross-log correlation (see
+    # backend/analysis/normalize.py's generic-event fallback and
+    # backend/analysis/correlate.py's extra_identifiers pass) without
+    # needing a hand-written per-family normalizer. None (the default)
+    # means this profile's events still get minimally normalized, just
+    # with no correlation identifiers beyond attributes.correlation_id if
+    # the profile happens to populate that exact field name.
+    correlation_keys: Optional[List[str]] = None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def profile_version(self) -> str:

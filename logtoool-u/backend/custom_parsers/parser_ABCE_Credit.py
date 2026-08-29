@@ -19,9 +19,25 @@ DEFAULT_SOURCE_SYSTEM = "abce_credit_portal"
 # family), typically followed somewhere by "Log Tracker No:".
 _TS_LINE_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M(?!\s*->)", re.MULTILINE)
 
+# "<timestamp> Log Tracker No: ID => msg" is a convention shared by several
+# other vendors in this package (AFS/Netcetera, Cardinal, the Debit portal
+# family) whose payloads just happen to also carry a "Log Tracker No:"
+# line -- that base check alone made this parser a false-positive magnet,
+# claiming files it produces zero real structure for (confirmed against
+# real Cardinal- and Debit-branded samples: every record fell through to
+# the generic Case D branch with an empty `details` dict). Requiring at
+# least one of this parser's own case-distinguishing content markers (ISO8583
+# XML payload, a function-call "Inputs(...)" line, or a "Warrning" line --
+# see parse_log_file()'s Case A/B/C below) means it only claims files it can
+# actually extract structured data from.
+_DISTINCTIVE_MARKERS = ("<?xml", "<iso8583postxml>", "inputs", "warrning")
+
 
 def detect(sample_text: str) -> bool:
-    return bool(_TS_LINE_RE.search(sample_text)) and "Log Tracker No:" in sample_text
+    if not (bool(_TS_LINE_RE.search(sample_text)) and "Log Tracker No:" in sample_text):
+        return False
+    lowered = sample_text.lower()
+    return any(marker in lowered for marker in _DISTINCTIVE_MARKERS)
 
 
 def parse_log_file(log_file_path, output_json_path=None):

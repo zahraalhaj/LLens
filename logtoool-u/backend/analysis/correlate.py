@@ -372,6 +372,83 @@ def _members_of(uf: _UnionFind, root: int, n: int) -> List[int]:
     return [i for i in range(n) if uf.find(i) == root]
 
 
+def _extra_identifier_pass(events: List[NormalizedEvent], uf: _UnionFind) -> List[CorrelationConflict]:
+    """Additional union-find pass over NormalizedEvent.extra_identifiers --
+    the generic bag non-payment-family events (LogFamily.GENERIC)
+    populate via a profile's declared correlation_keys (see normalize.py),
+    instead of the 7 fixed IDENTIFIER_KEY_TYPES the payment families use.
+    Runs AFTER _high_confidence_pass and continues unioning its already-
+    partially-merged state, so this is purely additive: every existing
+    payment-family event has an empty extra_identifiers dict (only
+    _normalize_generic_event() ever populates it), so the cheap early
+    return below means this whole function is a no-op whenever no
+    GENERIC-family events are present -- the 5 existing families'
+    correlation output is completely unchanged.
+
+    Every extra_identifiers key is treated as equal priority (there's no
+    fixed strength ranking for arbitrary per-source declared keys, unlike
+    HIGH_KEY_TYPES) -- a merge is refused (conflict recorded instead) if
+    the two roots already disagree on ANY OTHER extra_identifier key,
+    mirroring _would_conflict()'s safety principle. Recomputes each root's
+    current identifiers from live union-find membership on every
+    comparison rather than maintaining running bookkeeping across merges
+    -- simpler and correct by construction, at the cost of some redundant
+    work; acceptable since this only runs at all for non-payment-family
+    traffic, not the bulk case."""
+    n = len(events)
+    if not any(e.extra_identifiers for e in events):
+        return []
+
+    conflicts: List[CorrelationConflict] = []
+    all_keys = sorted({k for e in events for k, v in e.extra_identifiers.items() if v})
+
+    for key_type in all_keys:
+        groups: Dict[str, List[int]] = defaultdict(list)
+        for i, event in enumerate(events):
+            value = event.extra_identifiers.get(key_type)
+            if value:
+                groups[value].append(i)
+
+        for value, indices in groups.items():
+            if len(indices) < 2:
+                continue
+            anchor = indices[0]
+            seen_root_pairs = set()
+            for other in indices[1:]:
+                ra, rb = uf.find(anchor), uf.find(other)
+                if ra == rb:
+                    continue
+                pair_key = (ra, rb) if ra < rb else (rb, ra)
+                if pair_key in seen_root_pairs:
+                    continue
+
+                members_a, members_b = _members_of(uf, ra, n), _members_of(uf, rb, n)
+                ids_a = {k: v for i in members_a for k, v in events[i].extra_identifiers.items() if v}
+                ids_b = {k: v for i in members_b for k, v in events[i].extra_identifiers.items() if v}
+                disagreements = [
+                    ConflictingIdentifier(key_type=k, flow_a_value=ids_a[k], flow_b_value=ids_b[k])
+                    for k in sorted(set(ids_a) & set(ids_b))
+                    if ids_a[k] != ids_b[k]
+                ]
+                if disagreements:
+                    seen_root_pairs.add(pair_key)
+                    conflicts.append(
+                        CorrelationConflict(
+                            conflict_id=f"conflict:{key_type}:{_short_hash(value, str(ra), str(rb))}",
+                            triggering_key_type=key_type,
+                            triggering_value=value,
+                            conflicting_identifiers=disagreements,
+                            affected_flow_ids=[],
+                            source_event_ids_a=[events[i].source_event_id for i in members_a if events[i].source_event_id],
+                            source_event_ids_b=[events[i].source_event_id for i in members_b if events[i].source_event_id],
+                        )
+                    )
+                    continue
+                uf.union(ra, rb)
+
+    return conflicts
+
+
 def _medium_confidence_links(
     flows: List[CorrelatedFlow], window_seconds: int
 ) -> List[CandidateLink]:
@@ -510,6 +587,7 @@ def correlate_events(
 
     n = len(events)
     uf, root_identifiers, conflicts = _high_confidence_pass(events)
+    conflicts = conflicts + _extra_identifier_pass(events, uf)
 
     groups: Dict[int, List[int]] = defaultdict(list)
     for i in range(n):

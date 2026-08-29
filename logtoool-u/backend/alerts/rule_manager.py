@@ -27,6 +27,7 @@ logger = logging.getLogger("logtool.alerts.rule_manager")
 SEVERITY_ORDER = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR, LogLevel.CRITICAL]
 
 VALID_MODES = {"immediate", "digest"}
+VALID_TRIGGER_TYPES = {"severity", "anomaly"}
 
 # Fields that mean "no filter" when empty -- stored as NULL, not "".
 OPTIONAL_FILTER_FIELDS = ("source_system_filter", "component_filter", "message_contains", "recipients", "notification_group_id")
@@ -71,6 +72,7 @@ class AlertRuleManager:
         )
         Base.metadata.create_all(self.engine)
         self._ensure_notification_columns()
+        self._ensure_trigger_type_column()
         self.Session = sessionmaker(bind=self.engine)
         self._seed_defaults_if_empty()
 
@@ -88,6 +90,18 @@ class AlertRuleManager:
                 conn.execute(text("ALTER TABLE alert_rules ADD COLUMN dedup_windows_json TEXT"))
                 conn.commit()
                 logger.info("Migrated alert_rules table: added notification_group_id/dedup_windows_json columns.")
+
+    def _ensure_trigger_type_column(self) -> None:
+        """Same idempotent ALTER TABLE pattern as _ensure_notification_columns
+        -- a database created before trigger_type existed needs a one-time
+        migration. Existing rows default to 'severity', preserving their
+        exact current behavior."""
+        with self.engine.connect() as conn:
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(alert_rules)")).fetchall()]
+            if cols and "trigger_type" not in cols:
+                conn.execute(text("ALTER TABLE alert_rules ADD COLUMN trigger_type VARCHAR DEFAULT 'severity'"))
+                conn.commit()
+                logger.info("Migrated alert_rules table: added trigger_type column.")
 
     def _seed_defaults_if_empty(self) -> None:
         session = self.Session()
@@ -153,8 +167,9 @@ class AlertRuleManager:
         notification_group_id: Optional[str] = None,
         dedup_windows: Optional[Dict[str, int]] = None,
         created_by_user_id: Optional[str] = None,
+        trigger_type: str = "severity",
     ) -> Dict[str, Any]:
-        self._validate(min_level, mode)
+        self._validate(min_level, mode, trigger_type)
         session = self.Session()
         try:
             if session.query(AlertRuleModel).filter_by(name=name).first():
@@ -164,6 +179,7 @@ class AlertRuleManager:
                 rule_id=str(uuid.uuid4()),
                 name=name,
                 enabled=1,
+                trigger_type=trigger_type,
                 min_level=min_level,
                 source_system_filter=source_system_filter or None,
                 component_filter=component_filter or None,
@@ -188,6 +204,8 @@ class AlertRuleManager:
             LogLevel(fields["min_level"])  # raises ValueError if invalid
         if fields.get("mode") is not None and fields["mode"] not in VALID_MODES:
             raise ValueError(f"mode must be one of {VALID_MODES}")
+        if fields.get("trigger_type") is not None and fields["trigger_type"] not in VALID_TRIGGER_TYPES:
+            raise ValueError(f"trigger_type must be one of {VALID_TRIGGER_TYPES}")
 
         session = self.Session()
         try:
@@ -200,7 +218,7 @@ class AlertRuleManager:
                     raise RuleNameTakenError(f"A rule named '{fields['name']}' already exists")
                 rule.name = fields["name"]
 
-            for key in ("min_level", "mode", "dedup_window_minutes"):
+            for key in ("min_level", "mode", "dedup_window_minutes", "trigger_type"):
                 if fields.get(key) is not None:
                     setattr(rule, key, fields[key])
 
@@ -228,16 +246,19 @@ class AlertRuleManager:
         finally:
             session.close()
 
-    def _validate(self, min_level: str, mode: str) -> None:
+    def _validate(self, min_level: str, mode: str, trigger_type: str = "severity") -> None:
         LogLevel(min_level)  # raises ValueError if invalid
         if mode not in VALID_MODES:
             raise ValueError(f"mode must be one of {VALID_MODES}")
+        if trigger_type not in VALID_TRIGGER_TYPES:
+            raise ValueError(f"trigger_type must be one of {VALID_TRIGGER_TYPES}")
 
     def _to_dict(self, r: AlertRuleModel) -> Dict[str, Any]:
         return {
             "rule_id": r.rule_id,
             "name": r.name,
             "enabled": bool(r.enabled),
+            "trigger_type": r.trigger_type or "severity",
             "min_level": r.min_level,
             "source_system_filter": r.source_system_filter,
             "component_filter": r.component_filter,

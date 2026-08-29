@@ -7,7 +7,7 @@ from backend.alerts.email import EmailDispatcher
 from backend.alerts.notification_groups import GroupNameTakenError, GroupNotFoundError, NotificationGroupManager
 from backend.alerts.rule_manager import AlertRuleManager, RuleNameTakenError, RuleNotFoundError
 from backend.alerts.rules import AlertRulesProcessor
-from backend.alerts.state import AlertDeduplicationEngine
+from backend.alerts.state import ActiveAlertNotFoundError, AlertDeduplicationEngine
 from backend.api.deps import (
     get_alert_processor,
     get_alert_rule_manager,
@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 class CreateRuleRequest(BaseModel):
     name: str
+    trigger_type: str = "severity"  # 'severity' | 'anomaly'
     min_level: str = "ERROR"
     mode: str = "immediate"  # 'immediate' | 'digest'
     source_system_filter: Optional[str] = None
@@ -38,6 +39,7 @@ class CreateRuleRequest(BaseModel):
 class UpdateRuleRequest(BaseModel):
     name: Optional[str] = None
     enabled: Optional[bool] = None
+    trigger_type: Optional[str] = None
     min_level: Optional[str] = None
     mode: Optional[str] = None
     source_system_filter: Optional[str] = None
@@ -132,6 +134,42 @@ def get_history(
     processor: AlertRulesProcessor = Depends(get_alert_processor),
 ):
     return processor.get_dispatch_history(page=page, page_size=page_size)
+
+
+@router.get("/active")
+def list_active_alerts(
+    status: Optional[str] = Query(None, description="'firing' | 'acknowledged' | 'resolved'; omit for all non-resolved"),
+    _user: AuthenticatedUser = Depends(get_current_user),
+    dedup: AlertDeduplicationEngine = Depends(get_dedup_engine),
+):
+    return dedup.list_active_alerts(status_filter=status)
+
+
+@router.post("/active/{dedup_key}/acknowledge")
+def acknowledge_active_alert(
+    dedup_key: str,
+    # Any authenticated user (not just admins) can triage -- acknowledging
+    # a page shouldn't require admin rights, matching how IT Support
+    # "member" role staff actually use this.
+    user: AuthenticatedUser = Depends(get_current_user),
+    dedup: AlertDeduplicationEngine = Depends(get_dedup_engine),
+):
+    try:
+        return dedup.acknowledge(dedup_key, user.user_id)
+    except ActiveAlertNotFoundError:
+        raise HTTPException(status_code=404, detail="Active alert not found")
+
+
+@router.post("/active/{dedup_key}/resolve")
+def resolve_active_alert(
+    dedup_key: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+    dedup: AlertDeduplicationEngine = Depends(get_dedup_engine),
+):
+    try:
+        return dedup.resolve(dedup_key, user.user_id)
+    except ActiveAlertNotFoundError:
+        raise HTTPException(status_code=404, detail="Active alert not found")
 
 
 @router.post("/test")

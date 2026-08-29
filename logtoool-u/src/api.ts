@@ -58,7 +58,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  get: <T>(path: string) => request<T>(path, { method: 'GET' }),
+  // options lets a caller pass an AbortSignal (e.g. to cancel a stale
+  // poll/live-refresh request before it can clobber a newer one's result)
+  // without every other GET call site needing to know about it.
+  get: <T>(path: string, options?: RequestInit) => request<T>(path, { method: 'GET', ...options }),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined }),
   postForm: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),

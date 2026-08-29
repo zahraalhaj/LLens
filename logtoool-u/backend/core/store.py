@@ -6,6 +6,7 @@ Provides high-performance batch insertion, server-side pagination, and SQL filte
 import json
 import os
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 import logging
 from sqlalchemy import (
@@ -24,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from backend.core.schema import BatchRecord, CanonicalLogEvent, LogLevel, TimestampConfidence
+from backend.core.search_query import build_fts_match_query, parse_search_query
 
 logger = logging.getLogger("logtool.store")
 
@@ -95,6 +97,7 @@ class DatabaseManager:
             conn.commit()
         Base.metadata.create_all(self.engine)
         self._ensure_composite_indexes()
+        self._ensure_fts_index()
         logger.info(f"Database initialized at {self.db_path} with WAL mode enabled.")
 
     def _ensure_composite_indexes(self) -> None:
@@ -113,6 +116,44 @@ class DatabaseManager:
                 conn.execute(text("ALTER TABLE batches ADD COLUMN matched_profile_version VARCHAR"))
                 conn.commit()
                 logger.info("Migrated batches table: added matched_profile_version column.")
+
+    def _ensure_fts_index(self) -> None:
+        """FTS5 virtual table for full-text search over message/raw/
+        component, replacing the old unindexed 3-column LIKE scan (see
+        search_query.py). Deliberately NOT an "external content" FTS5
+        table (which would tie index freshness to SQLite rowid stability
+        across session.bulk_insert_mappings) -- this stores its own copy
+        of the searched columns and is kept in sync explicitly at every
+        write path (insert_batch_and_events/clear_all/delete_batch below),
+        matching this file's existing preference for explicit, logged SQL
+        migrations over trigger magic (see _ensure_composite_indexes).
+
+        tokenize='trigram' preserves today's substring-match behavior
+        (e.g. "OrderI" matching "OrderID") -- the default unicode61
+        tokenizer instead matches on token/word boundaries, which would be
+        a real regression for this kind of ID-heavy transaction log
+        content (UUIDs, tracker numbers, hyphenated identifiers)."""
+        with self.engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name='events_fts'")
+            ).fetchone()
+            if exists:
+                return
+            conn.execute(
+                text(
+                    "CREATE VIRTUAL TABLE events_fts USING fts5("
+                    "event_id UNINDEXED, message, raw, component, "
+                    "tokenize='trigram')"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO events_fts(event_id, message, raw, component) "
+                    "SELECT event_id, message, raw, component FROM events"
+                )
+            )
+            conn.commit()
+            logger.info("Created events_fts FTS5 index and backfilled existing events.")
 
     def insert_batch_and_events(
         self,
@@ -159,6 +200,16 @@ class DatabaseManager:
 
             if event_dicts:
                 session.bulk_insert_mappings(EventModel, event_dicts)
+                session.execute(
+                    text(
+                        "INSERT INTO events_fts(event_id, message, raw, component) "
+                        "VALUES (:event_id, :message, :raw, :component)"
+                    ),
+                    [
+                        {"event_id": d["event_id"], "message": d["message"], "raw": d["raw"], "component": d["component"]}
+                        for d in event_dicts
+                    ],
+                )
 
             session.commit()
             logger.info(f"Successfully committed batch {batch.batch_id} with {len(events)} events.")
@@ -198,13 +249,34 @@ class DatabaseManager:
                 query = query.filter(EventModel.component == component)
             if batch_id:
                 query = query.filter(EventModel.batch_id == batch_id)
-            if search_term:
-                term = f"%{search_term}%"
-                query = query.filter(
-                    (EventModel.message.like(term)) |
-                    (EventModel.raw.like(term)) |
-                    (EventModel.component.like(term))
-                )
+
+            # search_term supports field:value tokens (level:ERROR,
+            # source:cardinal, component:auth) alongside free text and
+            # "quoted phrases" -- see search_query.py. field:value tokens
+            # apply as ADDITIONAL equality filters on top of the level/
+            # source_system/component args above (same columns, so a
+            # contradictory pair -- e.g. the ERROR dropdown plus a typed
+            # "level:WARN" -- naturally ANDs to zero results rather than
+            # one silently overriding the other). Free text goes through
+            # the events_fts index instead of the old 3-column LIKE scan.
+            parsed = parse_search_query(search_term)
+            if "level" in parsed.field_filters:
+                query = query.filter(EventModel.level == parsed.field_filters["level"])
+            if "source_system" in parsed.field_filters:
+                query = query.filter(EventModel.source_system == parsed.field_filters["source_system"])
+            if "component" in parsed.field_filters:
+                query = query.filter(EventModel.component == parsed.field_filters["component"])
+
+            fts_match = build_fts_match_query(parsed.free_text_terms)
+            if fts_match:
+                matching_ids = [
+                    row[0]
+                    for row in session.execute(
+                        text("SELECT event_id FROM events_fts WHERE events_fts MATCH :q"), {"q": fts_match}
+                    ).fetchall()
+                ]
+                query = query.filter(EventModel.event_id.in_(matching_ids))
+
             if date_from:
                 query = query.filter(EventModel.ts_utc >= date_from)
             if date_to:
@@ -383,6 +455,7 @@ class DatabaseManager:
         try:
             session.query(EventModel).delete()
             session.query(BatchModel).delete()
+            session.execute(text("DELETE FROM events_fts"))
             session.commit()
             logger.warning("All log data cleared from the database.")
         finally:
@@ -396,12 +469,52 @@ class DatabaseManager:
             batch = session.query(BatchModel).filter_by(batch_id=batch_id).first()
             if not batch:
                 return False
+            # Must run before the delete below -- ON DELETE CASCADE removes
+            # the `events` rows this subquery depends on, and events_fts
+            # isn't itself a party to that FK relationship.
+            session.execute(
+                text("DELETE FROM events_fts WHERE event_id IN (SELECT event_id FROM events WHERE batch_id = :bid)"),
+                {"bid": batch_id},
+            )
             session.delete(batch)
             session.commit()
             logger.info("Deleted batch %s (%s)", batch_id, batch.file_name)
             return True
         finally:
             session.close()
+
+    def purge_batches_older_than(self, days: int) -> Dict[str, int]:
+        """Deletes every batch whose uploaded_at predates `days` ago
+        (and, via delete_batch(), its events and events_fts rows).
+        uploaded_at is used rather than EventModel.ts_utc -- ts_utc is
+        nullable (timestamp extraction can fail at parse time) while
+        uploaded_at is always populated, making it the reliable purge key.
+        Returns counts for logging/API response; never raises on an empty
+        result (0 batches older than the cutoff is a normal outcome, not
+        an error)."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        session = self.Session()
+        try:
+            stale_batches = (
+                session.query(BatchModel.batch_id, BatchModel.total_events)
+                .filter(BatchModel.uploaded_at < cutoff)
+                .all()
+            )
+        finally:
+            session.close()
+
+        batches_purged = 0
+        events_purged = 0
+        for batch_id, total_events in stale_batches:
+            if self.delete_batch(batch_id):
+                batches_purged += 1
+                events_purged += total_events or 0
+
+        logger.info(
+            "Retention purge (older than %s days, cutoff=%s): %d batches, %d events removed.",
+            days, cutoff, batches_purged, events_purged,
+        )
+        return {"batches_purged": batches_purged, "events_purged": events_purged}
 
     def get_component_error_counts(self) -> Dict[str, int]:
         """ERROR/CRITICAL event counts grouped by component. Used by the

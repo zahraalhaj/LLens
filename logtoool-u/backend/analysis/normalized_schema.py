@@ -46,6 +46,14 @@ class LogFamily(str, Enum):
     VFLEX = "vflex_transaction_log"
     OTP_PROCESSOR = "otp_online_processor"
 
+    # Fallback for any source_system with no registered family normalizer
+    # (declarative profiles, and the custom parsers that aren't one of the
+    # 5 families above) -- see backend/analysis/normalize.py's
+    # _normalize_generic_event(). These events get correlation (via
+    # NormalizedEvent.extra_identifiers below) but not the family-specific
+    # dependency-health/lifecycle-stage modeling the 5 families above have.
+    GENERIC = "generic_profile"
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers used by every family's normalize_<family>_event()
@@ -238,6 +246,15 @@ class NormalizedEvent(BaseModel):
     tran_ref: OptStr = None
     oob_tracker_id: OptStr = None
     msg_id: OptStr = None
+
+    # Generic correlation bag, alongside (not replacing) the named fields
+    # above -- populated ONLY by the generic-event fallback in normalize.py
+    # for source_systems outside the 5 hardcoded families, from a
+    # profile's declared ParserProfile.correlation_keys. Always empty for
+    # the 5 existing families' own normalize_<family>_event() functions,
+    # so this field's existence is zero-behavior-change for them. See
+    # backend/analysis/correlate.py's extra-identifier union-find pass.
+    extra_identifiers: Dict[str, str] = Field(default_factory=dict)
 
     # -- BUSINESS CONTEXT --
     issuer_id: OptStr = None

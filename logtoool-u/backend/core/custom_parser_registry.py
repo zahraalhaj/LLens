@@ -82,22 +82,63 @@ def get_custom_profile_by_name(name: str) -> Optional[ParserProfile]:
     return None
 
 
-def _score_module(module: Any, sample_text: str) -> float:
-    """Runs a parser against the sample and returns the fraction of records
-    that produced genuinely *structured* extraction (a non-empty `details`
-    dict) -- used only to break ties when more than one module's detect()
-    matches (see the Debit-family ambiguity note in parser_ABCE_Debit.py).
+def _count_filled_leaves(value: Any) -> int:
+    """Recursively counts non-empty scalar leaves inside a `details` value.
+    Used by _score_module to measure how much a parser actually decoded,
+    as opposed to just returning a dict with the right shape."""
+    if isinstance(value, dict):
+        return sum(_count_filled_leaves(v) for v in value.values())
+    if isinstance(value, list):
+        return sum(_count_filled_leaves(v) for v in value)
+    return 0 if value in (None, "", [], {}) else 1
 
-    Deliberately NOT scored by "does `action` have a value": every parser
-    in this registry has a generic catch-all fallback branch that echoes
-    the raw content back as `action` for ANY input, including input that
-    belongs to a totally different format -- that made the old metric
-    trivially satisfiable by the wrong parser (confirmed: ABCE_Credit's
-    generic fallback scored 100% against an AFS/Netcetera-formatted
-    sample, because "message content exists" is true regardless of
-    format). Scoring by non-empty `details` only rewards a parser that
-    actually recognized something format-specific (XML/JSON payload,
-    function parameters, etc.), not just that a line existed.
+
+def _score_module(module: Any, sample_text: str) -> float:
+    """Runs a parser against the sample and scores how well it actually
+    understood the format -- used only to break ties when more than one
+    module's detect() matches (see the Debit-family ambiguity note in
+    parser_ABCE_Debit.py).
+
+    Two prior metrics were tried and rejected before this one:
+
+    - "does `action` have a value": every parser in this registry has a
+      generic catch-all fallback branch that echoes the raw content back
+      as `action` for ANY input, including input that belongs to a
+      totally different format -- trivially satisfiable by the wrong
+      parser regardless of format.
+    - "is `details` non-empty": every parser's flat-record adapter always
+      builds `details` as a dict with several fixed keys (tracker_no,
+      event_type, etc.), so the dict itself is virtually never empty even
+      when every one of those keys holds None -- this saturates at 1.0
+      for almost any competent parser and effectively falls back to
+      dict-insertion-order in _MODULES for the tie-break (confirmed: on a
+      real Cardinal-branded sample, this metric scored the AFS/Netcetera
+      parser and the actual Cardinal parser identically at 1.0, and
+      AFS/Netcetera won only because it's registered earlier).
+
+    This metric instead combines two signals, both computed from the
+    flat-record shape run_custom_parser() relies on (see module docstring):
+
+    - Correlation coverage: fraction of records with a non-null
+      `correlation_id`. A parser that can't correlate a record to its
+      transaction/tracker either doesn't understand the format or is
+      losing continuation lines (e.g. a multi-line stack trace it failed
+      to attach to its parent event) -- confirmed on a real
+      Debit-Netcetera error log, where AFS/Netcetera's line-by-line
+      matching orphaned the exception/stack-trace lines as unrelated
+      "unparsed" records (correlation_id=None) while the correct
+      Debit-portal parser kept the whole block together.
+    - Filled-field density: average count of non-empty leaf values inside
+      `details` per record, saturated via x/(1+x) so it stays bounded
+      without an arbitrary normalization constant, and uses an absolute
+      count (not a ratio of filled/total) so a parser with a
+      deliberately-comprehensive schema (many legitimately-null optional
+      fields for a given event type) isn't penalized relative to a
+      parser with a small always-full schema.
+
+    Correlation coverage gates the score multiplicatively: a parser that
+    fails to correlate half its records gets its density score halved
+    too, regardless of how rich the fields it did fill in are.
     """
     with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False, encoding="utf-8") as tf:
         tf.write(sample_text)
@@ -106,8 +147,10 @@ def _score_module(module: Any, sample_text: str) -> float:
         records = module.parse_log_file(tmp_path)
         if not records:
             return 0.0
-        successful = sum(1 for r in records if r.get("details"))
-        return successful / len(records)
+        correlation_score = sum(1 for r in records if r.get("correlation_id")) / len(records)
+        avg_filled_leaves = sum(_count_filled_leaves(r.get("details")) for r in records) / len(records)
+        density_score = avg_filled_leaves / (1 + avg_filled_leaves)
+        return correlation_score * density_score
     except Exception:
         logger.exception("Custom parser %s failed while scoring detection sample", module.__name__)
         return 0.0

@@ -7,7 +7,7 @@ live in a checked-in config file (session cookie behavior, SMTP creds).
 """
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -44,6 +44,11 @@ class Settings:
         self.smtp_password: str = os.environ.get("SMTP_PASSWORD", self._raw.get("smtp_password", ""))
         self.alert_email_to: str = os.environ.get("ALERT_EMAIL_TO", self._raw.get("alert_email_to", "admin@example.com"))
 
+        # Retention: None/0 = keep forever. MUST default to disabled --
+        # an existing install upgrading into this feature should never
+        # start silently deleting data just because the field exists now.
+        self.retention_days: Optional[int] = self._raw.get("retention_days") or None
+
         Path(self.profiles_dir).mkdir(parents=True, exist_ok=True)
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -72,6 +77,16 @@ class Settings:
         self._raw["smtp_user"] = self.smtp_user
         self._raw["smtp_password"] = self.smtp_password
         self._raw["alert_email_to"] = self.alert_email_to
+        CONFIG_PATH.write_text(yaml.dump(self._raw, default_flow_style=False, sort_keys=False))
+
+    def get_retention_config(self) -> Dict[str, Any]:
+        return {"retention_days": self.retention_days}
+
+    def update_retention_config(self, retention_days: Optional[int]) -> None:
+        """0 or None both mean "disabled" -- normalized to None so
+        core/retention.py's job only ever has to check falsiness once."""
+        self.retention_days = retention_days or None
+        self._raw["retention_days"] = self.retention_days
         CONFIG_PATH.write_text(yaml.dump(self._raw, default_flow_style=False, sort_keys=False))
 
 

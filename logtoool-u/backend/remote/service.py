@@ -295,6 +295,10 @@ class RemoteMachineService:
                         self.alert_processor.evaluate_batch_alerts(batch_id=summary.batch_id, events=events)
                     except Exception:
                         logger.exception(f"Alert evaluation failed for remote batch {summary.batch_id}")
+                    try:
+                        self.alert_processor.evaluate_anomaly_rules(self.db_manager)
+                    except Exception:
+                        logger.exception(f"Anomaly alert evaluation failed for remote batch {summary.batch_id}")
             except Exception as e:
                 logger.exception(f"Ingestion failed for {remote_file.path} from '{label}'")
                 errors.append(f"{remote_file.path}: {e}")

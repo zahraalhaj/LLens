@@ -1091,9 +1091,18 @@ def detect(sample_text: str) -> bool:
 
     has_debit_marker = "debit" in decoded_lower and ("request" in decoded_lower or "response" in decoded_lower)
     has_postilion_marker = "postilion" in decoded_lower or "postailion" in decoded_lower
-    has_tracker = bool(LOG_TRACKER_RE.search(sample_text))
 
-    return has_debit_marker or has_postilion_marker or has_tracker
+    # A bare "Log Tracker No:" match (previously has_tracker, ORed in here)
+    # was dropped: that convention is shared by several other vendors in
+    # this package (AFS/Netcetera, Cardinal, ABCE_Credit all use the same
+    # "<timestamp> Log Tracker No: ID => msg" shape), so it isn't actually
+    # debit-specific -- it made this parser a candidate for virtually any
+    # Log-Tracker-family file regardless of vendor. Confirmed regression:
+    # a purely AFS/Netcetera-flavored sample (no "debit"/"postilion"
+    # anywhere) tied with the real AFS/Netcetera parser on detect() purely
+    # because of this clause, and only the real debit/postilion markers
+    # should decide that.
+    return has_debit_marker or has_postilion_marker
 
 
 def parse_log_file(log_file_path, output_json_path=None):

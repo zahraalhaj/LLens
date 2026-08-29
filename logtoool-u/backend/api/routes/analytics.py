@@ -29,7 +29,7 @@ from backend.analysis.dashboards import (
 )
 from backend.analysis.pipeline import ENGINE_VERSION, AnalysisBundle, run_analysis_pipeline
 from backend.api.date_range import resolve_date_range
-from backend.api.deps import get_current_user, get_db
+from backend.api.deps import get_current_user, get_db, get_profile_manager
 from backend.auth.service import AuthenticatedUser
 from backend.core.store import DatabaseManager
 
@@ -55,7 +55,12 @@ def _pipeline(
     date_to: Optional[str],
 ):
     resolved_from, resolved_to = resolve_date_range(lookback_hours, date_from, date_to)
-    return run_analysis_pipeline(db, date_from=resolved_from, date_to=resolved_to)
+    # get_profile_manager() is @lru_cache'd (backend/api/deps.py) -- calling
+    # it directly here is the same cached singleton every route already
+    # gets via Depends(get_profile_manager), just without threading a new
+    # parameter through this file's 11 separate route signatures for a
+    # single internal helper's benefit.
+    return run_analysis_pipeline(db, date_from=resolved_from, date_to=resolved_to, profile_manager=get_profile_manager())
 
 
 @router.get("/service-overview")

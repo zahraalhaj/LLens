@@ -14,6 +14,13 @@ class AlertRuleModel(Base):
     name = Column(String, nullable=False, unique=True)
     enabled = Column(Integer, nullable=False, default=1)
 
+    # 'severity' (default) = the classic per-event min_level/filters match
+    # below. 'anomaly' = fires from the statistical outlier detector in
+    # core/profiling.py instead (see AlertRulesProcessor.evaluate_anomaly_rules)
+    # -- min_level/source_system_filter/component_filter/message_contains are
+    # ignored for anomaly-triggered rules.
+    trigger_type = Column(String, nullable=False, default="severity")
+
     # Fires for events at or above this severity (DEBUG < INFO < WARN < ERROR < CRITICAL).
     min_level = Column(String, nullable=False, default="ERROR")
 
@@ -102,11 +109,41 @@ class AlertDedupStateModel(Base):
     (rule_id, source, component, message signature) -- an in-memory dict
     was the original implementation and lost all suppression state on
     every restart, which could cause an alert storm right after a
-    deploy/restart, exactly when you don't want one."""
+    deploy/restart, exactly when you don't want one.
+
+    This row doubles as the "active alert" record: one row per distinct
+    (rule, source, component, message-signature) is exactly the identity a
+    firing/acknowledged/resolved lifecycle needs, so rather than a
+    parallel table, the lifecycle columns below live right alongside the
+    existing suppression timer. dedup_key itself is a one-way hash (see
+    state.py's _make_key), so the plaintext context columns are what let
+    the UI show anything readable."""
     __tablename__ = "alert_dedup_state"
 
     dedup_key = Column(String, primary_key=True)  # composite key, pre-joined
     last_fired_at = Column(String, nullable=False)
+
+    # Lifecycle: 'firing' | 'acknowledged' | 'resolved'. New signatures
+    # start 'firing'; a signature that fires again after being 'resolved'
+    # reopens back to 'firing' (see state.py's should_fire_alert) rather
+    # than silently staying 'resolved' while still actively occurring --
+    # same reopen-on-recurrence convention PagerDuty/Opsgenie use.
+    status = Column(String, nullable=False, default="firing")
+
+    # Plaintext context for the UI -- dedup_key can't be reversed.
+    rule_id = Column(String, nullable=True)
+    rule_name = Column(String, nullable=True)
+    source_system = Column(String, nullable=True)
+    component = Column(String, nullable=True)
+    message_snippet = Column(String, nullable=True)
+    correlation_field = Column(String, nullable=True)
+    correlation_value = Column(String, nullable=True)
+
+    first_fired_at = Column(String, nullable=True)
+    acknowledged_at = Column(String, nullable=True)
+    acknowledged_by_user_id = Column(String, nullable=True)
+    resolved_at = Column(String, nullable=True)
+    resolved_by_user_id = Column(String, nullable=True)
 
 
 class AlertRuleSeedMarkerModel(Base):

@@ -4,12 +4,13 @@ import { Login } from './components/Login';
 import { ChangePassword } from './components/ChangePassword';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
-import { TabType, getNavItem } from './navConfig';
+import { TabType, getNavItem, NAV_ITEMS } from './navConfig';
 import { UploadView } from './components/UploadView';
 import { ExploreView } from './components/ExploreView';
 import { StatsView } from './components/StatsView';
 import { PaymentMonitoringView } from './components/PaymentMonitoringView';
 import { AnalyticsView } from './components/AnalyticsView';
+import { ProfilingView } from './components/ProfilingView';
 import { AlertsView } from './components/AlertsView';
 import { ChatView } from './components/ChatView';
 import { AIAnalystView } from './components/AIAnalystView';
@@ -20,9 +21,32 @@ import { ConfirmProvider } from './components/ConfirmDialog';
 import { ParserProfile, LogStats, DrillThroughTarget } from './types';
 import { api } from './api';
 
+const isValidTab = (value: string | null): value is TabType =>
+  !!value && NAV_ITEMS.some((item) => item.id === value);
+
+const readTabFromUrl = (): TabType => {
+  const tab = new URLSearchParams(window.location.search).get('tab');
+  return isValidTab(tab) ? tab : 'explore';
+};
+
 function AppShell() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>('explore');
+  // Deep-linkable: the active tab is reflected in ?tab=, readable on load
+  // and restorable via browser back/forward, so a tab can be shared by
+  // pasting the URL instead of only "switch to X, then tell them where to
+  // click."
+  const [activeTab, setActiveTabState] = useState<TabType>(readTabFromUrl);
+  const setActiveTab = useCallback((tab: TabType) => {
+    setActiveTabState(tab);
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', tab);
+    window.history.pushState(null, '', `${window.location.pathname}?${params.toString()}`);
+  }, []);
+  useEffect(() => {
+    const onPopState = () => setActiveTabState(readTabFromUrl());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [profiles, setProfiles] = useState<ParserProfile[]>([]);
   const [stats, setStats] = useState<LogStats | null>(null);
   const [ollamaAvailable, setOllamaAvailable] = useState(false);
@@ -123,6 +147,8 @@ function AppShell() {
             )}
 
             {activeTab === 'stats' && <StatsView />}
+
+            {activeTab === 'profiling' && <ProfilingView />}
 
             {activeTab === 'payment-monitoring' && <PaymentMonitoringView />}
 

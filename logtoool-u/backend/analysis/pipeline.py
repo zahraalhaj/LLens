@@ -27,6 +27,7 @@ from backend.analysis.pattern import analyze_recurring_patterns
 from backend.analysis.pattern_schema import PatternAnalysisResult
 from backend.analysis.quality import analyze_data_quality
 from backend.analysis.quality_schema import QualityAnalysisResult
+from backend.core.profiles import ProfileManager
 from backend.core.store import DatabaseManager
 
 ALL_PAYMENT_FAMILIES: tuple = tuple(f.value for f in LogFamily)
@@ -91,6 +92,7 @@ def run_analysis_pipeline(
     date_to: Optional[str] = None,
     source_systems: Optional[List[str]] = None,
     limit_per_family: int = 50000,
+    profile_manager: Optional[ProfileManager] = None,
 ) -> AnalysisBundle:
     """Fetches raw canonical events per family (bounded, same
     per-source_system query contract every other analysis route already
@@ -98,6 +100,16 @@ def run_analysis_pipeline(
     (Phase 2), correlates (Phase 3), and runs every downstream
     deterministic phase (4-9). This is the ONLY function a Phase 10 route
     should call for analytical data.
+
+    source_systems now defaults to every distinct source_system actually
+    present (not just the 5 hardcoded payment families) -- declarative-
+    profile and non-family custom-parser events get a GENERIC
+    NormalizedEvent from normalize.py rather than being silently dropped
+    before they ever reach this pipeline. `profile_manager`, when given,
+    is used once to build a source_system -> ParserProfile.correlation_keys
+    lookup for those GENERIC events (see normalize_events());
+    omitting it just means they get no correlation identifiers beyond
+    attributes.correlation_id when present -- never an error.
 
     Results are cached for _PIPELINE_CACHE_TTL_SECONDS so that rapid
     dashboard tab switches and AI Analyst follow-ups don't re-run the
@@ -108,7 +120,7 @@ def run_analysis_pipeline(
     if cached and (now - cached[0]) < _PIPELINE_CACHE_TTL_SECONDS:
         return cached[1]
 
-    families = source_systems or list(ALL_PAYMENT_FAMILIES)
+    families = source_systems or db.get_distinct_values("source_system") or list(ALL_PAYMENT_FAMILIES)
     raw_events: List[dict] = []
     for family in families:
         raw_events.extend(
@@ -120,7 +132,13 @@ def run_analysis_pipeline(
     batch_ids = list({e.get("batch_id") for e in raw_events if e.get("batch_id")})
     parser_versions = db.get_profile_versions_for_batches(batch_ids)
 
-    events = normalize_events(raw_events)
+    correlation_keys_by_source: Dict[str, List[str]] = {}
+    if profile_manager is not None:
+        for profile in profile_manager.list_profiles():
+            if profile.correlation_keys:
+                correlation_keys_by_source[profile.default_source_system] = profile.correlation_keys
+
+    events = normalize_events(raw_events, correlation_keys_by_source)
     correlation_result = correlate_events(events)
     lifecycles = reconstruct_lifecycles(correlation_result.flows, events)
     queue_handoff = compute_otp_handoff_chain(events)

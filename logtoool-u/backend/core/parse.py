@@ -28,6 +28,7 @@ TIMESTAMP_PREFIX_REGEXES = [
     re.compile(r'^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}'),  # ISO-8601: 2026-08-05 20:17:33
     re.compile(r'^[A-Za-z]{3}\s+\d+\s+\d{2}:\d{2}:\d{2}'),    # Syslog: Aug  5 20:17:33
     re.compile(r'^\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}'),     # Apache: 05/Aug/2026:20:17:33
+    re.compile(r'^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M'),  # US: 8/24/2026 3:00:02 PM
     re.compile(r'^\d{10}(?:\.\d+)?'),                         # Epoch timestamp
     re.compile(r'^\{.*"timestamp".*\}', re.DOTALL),          # JSON line
 ]

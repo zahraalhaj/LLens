@@ -20,8 +20,9 @@ from backend.alerts.models import AlertDispatchLogModel
 from backend.alerts.notification_groups import NotificationGroupManager
 from backend.alerts.rule_manager import SEVERITY_ORDER, AlertRuleManager, level_meets_threshold
 from backend.alerts.state import AlertDeduplicationEngine
+from backend.core.profiling import compute_anomaly_report
 from backend.core.schema import LogLevel
-from backend.core.store import Base
+from backend.core.store import Base, DatabaseManager
 
 logger = logging.getLogger("logtool.alerts.rules")
 
@@ -147,6 +148,8 @@ class AlertRulesProcessor:
         group_by_id = {g["group_id"]: g for g in self.group_manager.list_groups()}
 
         for rule in rules:
+            if rule.get("trigger_type") == "anomaly":
+                continue  # anomaly-triggered rules are evaluated exclusively by evaluate_anomaly_rules
             matching = [e for e in events if _matches_rule(e, rule)]
             if not matching:
                 continue
@@ -159,8 +162,14 @@ class AlertRulesProcessor:
                     comp = e.get("component") or "none"
                     msg = e.get("message") or ""
                     window = _effective_dedup_window(rule, e.get("level"))
+                    correlation_value = _extract_correlation_identifier(e)
 
-                    if not self.dedup_engine.should_fire_alert(rule["rule_id"], source, comp, msg, window):
+                    if not self.dedup_engine.should_fire_alert(
+                        rule["rule_id"], source, comp, msg, window,
+                        rule_name=rule["name"],
+                        correlation_field="correlation_id" if correlation_value else None,
+                        correlation_value=correlation_value,
+                    ):
                         continue
 
                     subject = f"{rule['name']}: {source} [{comp}]"
@@ -177,7 +186,7 @@ class AlertRulesProcessor:
                     )
                     self._dispatch_and_log(
                         rule, batch_id, subject, body, event_count=1,
-                        recipients=recipients, correlation_value=_extract_correlation_identifier(e),
+                        recipients=recipients, correlation_value=correlation_value,
                     )
                     triggered.append({"rule": rule["name"], "mode": "immediate", "source": source, "component": comp})
 
@@ -190,8 +199,14 @@ class AlertRulesProcessor:
                 # this dispatch, even if lower-severity events in the same
                 # batch would normally be suppressed.
                 window = _effective_dedup_window(rule, _highest_severity(matching))
+                correlation_value = _extract_correlation_identifier(matching[0])
 
-                if not self.dedup_engine.should_fire_alert(rule["rule_id"], source, comp, msg, window):
+                if not self.dedup_engine.should_fire_alert(
+                    rule["rule_id"], source, comp, msg, window,
+                    rule_name=rule["name"],
+                    correlation_field="correlation_id" if correlation_value else None,
+                    correlation_value=correlation_value,
+                ):
                     continue
 
                 sample_lines = "\n".join(
@@ -211,16 +226,76 @@ class AlertRulesProcessor:
                 # dispatch model this table doesn't have.
                 self._dispatch_and_log(
                     rule, batch_id, subject, body, event_count=len(matching),
-                    recipients=recipients, correlation_value=_extract_correlation_identifier(matching[0]),
+                    recipients=recipients, correlation_value=correlation_value,
                 )
                 triggered.append({"rule": rule["name"], "mode": "digest", "source": source, "count": len(matching)})
+
+        return triggered
+
+    def evaluate_anomaly_rules(self, db: DatabaseManager) -> List[Dict[str, Any]]:
+        """Evaluates rules with trigger_type == "anomaly" against the
+        whole-database statistical outlier report (core/profiling.py).
+        Unlike evaluate_batch_alerts, this isn't scoped to one ingested
+        batch -- the z-score computation is a database-wide aggregate that
+        can only shift meaningfully after new data lands, so ingestion is
+        still the right trigger point, it just re-scans everything rather
+        than the new batch alone. Cheap early-return when no anomaly rules
+        are enabled, so this adds ~zero overhead for installs that don't
+        use the feature."""
+        rules = [r for r in self.rule_manager.list_enabled_rules() if r.get("trigger_type") == "anomaly"]
+        if not rules:
+            return []
+
+        report = compute_anomaly_report(db)
+        flagged = [("component", item) for item in report["flagged_components"]] + [
+            ("hour", item) for item in report["flagged_hours"]
+        ]
+        if not flagged:
+            return []
+
+        group_by_id = {g["group_id"]: g for g in self.group_manager.list_groups()}
+        triggered: List[Dict[str, Any]] = []
+
+        for rule in rules:
+            recipients = _effective_recipients(rule, group_by_id)
+            for kind, item in flagged:
+                # z >= 3.0 (~3 standard deviations) is treated as more severe
+                # than a bare threshold-clearing outlier -- mirrors the
+                # severity-derived dedup window below, same idea as
+                # _effective_dedup_window's "more severe = notify more often".
+                severity = "ERROR" if item["z_score"] >= 3.0 else "WARN"
+                window = _effective_dedup_window(rule, severity)
+
+                # Dedup identity is this rule + this specific flagged
+                # component/hour, so a persistently-anomalous signature
+                # doesn't re-notify every ingest within the suppression
+                # window, but a newly-flagged one does.
+                if not self.dedup_engine.should_fire_alert(
+                    rule["rule_id"], "anomaly", f"{kind}:{item['name']}", "statistical anomaly", window,
+                    rule_name=rule["name"],
+                ):
+                    continue
+
+                subject = f"{rule['name']}: anomaly in {kind} '{item['name']}'"
+                body = (
+                    f"Alert rule: {rule['name']}\n\n"
+                    f"Statistical anomaly detected (heuristic z-score -- see Anomaly Insights).\n"
+                    f"{kind.capitalize()}: {item['name']}\n"
+                    f"Count: {item['count']}\n"
+                    f"Z-score: {item['z_score']}\n"
+                )
+                self._dispatch_and_log(
+                    rule, batch_id=None, subject=subject, body=body, event_count=item["count"],
+                    recipients=recipients, correlation_value=None,
+                )
+                triggered.append({"rule": rule["name"], "mode": "anomaly", "kind": kind, "name": item["name"]})
 
         return triggered
 
     def _dispatch_and_log(
         self,
         rule: Dict[str, Any],
-        batch_id: str,
+        batch_id: Optional[str],
         subject: str,
         body: str,
         event_count: int,

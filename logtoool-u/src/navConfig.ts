@@ -10,6 +10,7 @@ import {
   ServerCog,
   LayoutDashboard,
   BrainCircuit,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -19,6 +20,7 @@ export type TabType =
   | 'stats'
   | 'payment-monitoring'
   | 'analytics'
+  | 'profiling'
   | 'alerts'
   | 'chat'
   | 'ai-analyst'
@@ -71,7 +73,8 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Analytics',
     items: [
       { id: 'stats', label: 'Analytics & Stats', description: 'Ingestion volume, sources, error rates, and event timeline', icon: Terminal },
-      { id: 'alerts', label: 'Alerts Center', description: 'Alert rules and dispatch history', icon: BellRing },
+      { id: 'profiling', label: 'Anomaly Insights', description: 'Statistical outlier detection over component errors and hourly volume', icon: Activity },
+      { id: 'alerts', label: 'Alerts Center', description: 'Alert rules, active incidents, and dispatch history', icon: BellRing },
     ],
   },
   {

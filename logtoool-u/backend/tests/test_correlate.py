@@ -562,3 +562,63 @@ def test_realistic_vflex_conflict_scenario():
     assert len(result.flows) == 2
     assert len(result.conflicts) == 1
     assert result.conflicts[0].triggering_key_type == "tracker_no"
+
+
+# ---------------------------------------------------------------------------
+# extra_identifiers: correlation for non-payment-family (LogFamily.GENERIC)
+# events, populated via a declarative profile's correlation_keys -- see
+# normalize.py's _normalize_generic_event() and correlate.py's
+# _extra_identifier_pass(). Purely additive: every payment-family event
+# has an empty extra_identifiers dict, so these events must never affect
+# a flow built only from the 5 existing families (last test below).
+# ---------------------------------------------------------------------------
+
+
+def test_generic_events_correlate_on_shared_extra_identifier():
+    a = _ne(1, "a", log_family=LogFamily.GENERIC, extra_identifiers={"session_id": "SESS-1"})
+    b = _ne(1, "b", log_family=LogFamily.GENERIC, ts="2026-08-20T10:00:05Z", extra_identifiers={"session_id": "SESS-1"})
+    result = correlate_events([a, b])
+
+    assert len(result.flows) == 1
+    assert sorted(result.flows[0].linked_event_ids) == ["a", "b"]
+
+
+def test_generic_events_with_different_identifier_values_stay_separate():
+    a = _ne(1, "a", log_family=LogFamily.GENERIC, extra_identifiers={"session_id": "SESS-1"})
+    b = _ne(1, "b", log_family=LogFamily.GENERIC, extra_identifiers={"session_id": "SESS-2"})
+    result = correlate_events([a, b])
+    assert len(result.flows) == 2
+
+
+def test_generic_events_disagreeing_on_a_second_key_records_conflict_not_merge():
+    a = _ne(1, "a", log_family=LogFamily.GENERIC, extra_identifiers={"session_id": "SESS-1", "user_id": "U1"})
+    b = _ne(1, "b", log_family=LogFamily.GENERIC, extra_identifiers={"session_id": "SESS-1", "user_id": "U2"})
+    result = correlate_events([a, b])
+
+    assert len(result.flows) == 2  # refused to merge
+    assert len(result.conflicts) == 1
+    assert result.conflicts[0].triggering_key_type == "session_id"
+    assert result.conflicts[0].conflicting_identifiers[0].key_type == "user_id"
+
+
+def test_generic_event_with_no_extra_identifiers_stays_uncorrelated_alone():
+    a = _ne(1, "a", log_family=LogFamily.GENERIC)
+    result = correlate_events([a])
+    assert len(result.flows) == 1
+    assert result.flows[0].correlation_status == CorrelationStatus.UNCORRELATED
+
+
+def test_extra_identifier_pass_does_not_affect_payment_family_only_flows():
+    """Zero-behavior-change guarantee: a fixture built purely from the 5
+    existing families (no extra_identifiers anywhere) must correlate
+    identically whether or not _extra_identifier_pass runs -- it should
+    cheap-early-return and touch nothing."""
+    a = _ne(1, "a", log_family=LogFamily.CARDINAL, transaction_id="TXN1")
+    b = _ne(1, "b", log_family=LogFamily.NETCETERA_VPLUS, transaction_id="TXN1", ts="2026-08-20T10:00:05Z")
+    c = _ne(2, "c", log_family=LogFamily.CARDINAL, transaction_id="TXN2")
+    result = correlate_events([a, b, c])
+
+    assert len(result.flows) == 2
+    txn1_flow = _flow_for(result, "a")
+    assert sorted(txn1_flow.linked_event_ids) == ["a", "b"]
+    assert result.conflicts == []

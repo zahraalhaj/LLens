@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, CheckCircle2, AlertTriangle, Play, Save, Cpu, Terminal, RefreshCw, Server, Zap, Lock, Mail, Bell } from 'lucide-react';
+import { Settings, CheckCircle2, AlertTriangle, Play, Save, Cpu, Terminal, RefreshCw, Server, Zap, Lock, Mail, Bell, Clock, Trash2 } from 'lucide-react';
 import { ParserProfile, ProfileType } from '../types';
 import { api, ApiError } from '../api';
+import { useConfirm } from './ConfirmDialog';
 
 interface SettingsViewProps {
   profiles: ParserProfile[];
@@ -19,6 +20,7 @@ interface SmtpConfig {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshProfiles, ollamaAvailable, isAdmin }) => {
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<'manager' | 'builder' | 'ai' | 'notifications'>('ai');
 
   // Profile Builder State
@@ -31,6 +33,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
   const [pLvlField, setPLvlField] = useState<string>('level');
   const [pMsgField, setPMsgField] = useState<string>('message');
   const [pComponentField, setPComponentField] = useState<string>('component');
+  const [pCorrelationKeys, setPCorrelationKeys] = useState<string>(''); // comma-separated attribute field names, priority order
 
   const [testLine, setTestLine] = useState<string>('2026-08-05 20:17:33 [ERROR] Database connection pool closed unexpectedly');
   const [testResult, setTestResult] = useState<any | null>(null);
@@ -53,6 +56,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
   const [smtpStatus, setSmtpStatus] = useState<string | null>(null);
   const [smtpError, setSmtpError] = useState<string | null>(null);
 
+  // Data retention
+  const [retentionDays, setRetentionDays] = useState<string>(''); // '' = disabled/keep forever
+  const [retentionSaving, setRetentionSaving] = useState<boolean>(false);
+  const [retentionStatus, setRetentionStatus] = useState<string | null>(null);
+  const [retentionError, setRetentionError] = useState<string | null>(null);
+  const [purging, setPurging] = useState<boolean>(false);
+  const [purgeResult, setPurgeResult] = useState<string | null>(null);
+
   useEffect(() => {
     api
       .get<{ ollama_url: string; ollama_model: string }>('/api/ai/config')
@@ -66,6 +77,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
           setSmtpForm({ smtp_host: cfg.smtp_host, smtp_port: cfg.smtp_port, smtp_user: cfg.smtp_user, smtp_password: '', alert_email_to: cfg.alert_email_to });
         })
         .catch((err) => console.error('Failed to load SMTP config:', err));
+      api
+        .get<{ retention_days: number | null }>('/api/settings/retention')
+        .then((cfg) => setRetentionDays(cfg.retention_days ? String(cfg.retention_days) : ''))
+        .catch((err) => console.error('Failed to load retention config:', err));
     }
   }, [isAdmin]);
 
@@ -111,6 +126,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
         level_field: pLvlField,
         message_field: pMsgField,
         component_field: pComponentField || null,
+        correlation_keys: pCorrelationKeys.trim()
+          ? pCorrelationKeys.split(',').map((k) => k.trim()).filter(Boolean)
+          : null,
       };
       await api.post('/api/profiles', newProf);
       setSaveStatus(`Profile '${pName}' saved.`);
@@ -133,6 +151,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
       setSmtpError(err instanceof ApiError ? err.detail : 'Failed to save SMTP settings');
     } finally {
       setSmtpSaving(false);
+    }
+  };
+
+  const handleSaveRetention = async () => {
+    setRetentionSaving(true);
+    setRetentionStatus(null);
+    setRetentionError(null);
+    try {
+      const days = retentionDays ? parseInt(retentionDays, 10) : null;
+      await api.put('/api/settings/retention', { retention_days: days });
+      setRetentionStatus(days ? `Events older than ${days} days will be purged automatically (checked daily).` : 'Automatic retention disabled -- data is kept forever.');
+    } catch (err) {
+      setRetentionError(err instanceof ApiError ? err.detail : 'Failed to save retention settings');
+    } finally {
+      setRetentionSaving(false);
+    }
+  };
+
+  const handlePurgeNow = async () => {
+    const confirmed = await confirm({
+      title: 'Purge old data now?',
+      message: `Permanently delete every batch (and its events) older than ${retentionDays || '0'} days, using the saved retention setting. This cannot be undone -- export anything you need first.`,
+      confirmLabel: 'Purge now',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    setPurging(true);
+    setPurgeResult(null);
+    setRetentionError(null);
+    try {
+      const result = await api.post<{ ok: boolean; message?: string; batches_purged: number; events_purged: number }>(
+        '/api/settings/retention/purge-now',
+        {}
+      );
+      setPurgeResult(
+        result.ok
+          ? `Purged ${result.batches_purged} batch(es), ${result.events_purged} event(s).`
+          : result.message || 'Nothing purged.'
+      );
+    } catch (err) {
+      setRetentionError(err instanceof ApiError ? err.detail : 'Failed to purge old data');
+    } finally {
+      setPurging(false);
     }
   };
 
@@ -350,6 +412,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
                     <input type="text" value={pComponentField} onChange={(e) => setPComponentField(e.target.value)} className="w-full text-xs bg-white border border-slate-300 rounded p-1.5 font-mono" />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500">Correlation Keys (optional)</label>
+                  <input
+                    type="text"
+                    value={pCorrelationKeys}
+                    onChange={(e) => setPCorrelationKeys(e.target.value)}
+                    placeholder="e.g. session_id, request_id"
+                    className="w-full text-xs bg-white border border-slate-300 rounded p-1.5 font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Comma-separated attribute field names, in priority order. Lets this profile's events correlate
+                    across logs on the Analytics tab, the same way the built-in payment parsers do.
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-4 bg-slate-900 p-5 rounded-xl text-white">
@@ -519,6 +596,102 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ profiles, onRefreshP
                 </ol>
                 <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] text-slate-500">
                   <strong className="text-slate-800">Tip:</strong> Set SMTP host to <code className="text-blue-600">localhost</code> to test without a real mail server — sends are simulated and logged.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-7 bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-400" />
+                    <h3 className="text-sm font-extrabold text-white tracking-wide uppercase">Data Retention</h3>
+                  </div>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <p className="text-slate-400">
+                    Automatically purge batches (and their events) older than a set number of days. Disabled by
+                    default -- data is kept forever unless you set a value here. Export anything you need before
+                    lowering this or purging manually below.
+                  </p>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">Days to keep</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={retentionDays}
+                      onChange={(e) => setRetentionDays(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 font-mono text-slate-200 text-xs"
+                      placeholder="Blank = keep forever"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2 flex-wrap">
+                    <button
+                      onClick={handleSaveRetention}
+                      disabled={retentionSaving}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                    >
+                      {retentionSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Save Retention Settings
+                    </button>
+                    <button
+                      onClick={handlePurgeNow}
+                      disabled={purging}
+                      className="px-4 py-2 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800 text-rose-300 font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {purging ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      Purge Now
+                    </button>
+                  </div>
+
+                  {retentionStatus && (
+                    <div className="p-3 rounded-lg border text-xs font-mono bg-emerald-950/80 border-emerald-800 text-emerald-300">
+                      <div className="font-bold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        {retentionStatus}
+                      </div>
+                    </div>
+                  )}
+                  {purgeResult && (
+                    <div className="p-3 rounded-lg border text-xs font-mono bg-blue-950/60 border-blue-800 text-blue-300">
+                      {purgeResult}
+                    </div>
+                  )}
+                  {retentionError && (
+                    <div className="p-3 rounded-lg border text-xs font-mono bg-rose-950/80 border-rose-800 text-rose-300">
+                      <div className="font-bold flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" />
+                        {retentionError}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="lg:col-span-5 bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  How Retention Works
+                </h3>
+                <ol className="space-y-3 text-xs text-slate-700 list-decimal list-inside font-medium">
+                  <li className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <strong className="text-slate-900 block font-bold mb-0.5">1. Set a window</strong>
+                    Enter how many days of data to keep. A daily background check purges anything older.
+                  </li>
+                  <li className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <strong className="text-slate-900 block font-bold mb-0.5">2. Export first</strong>
+                    Use Explore's CSV/JSON export on anything you'd want to keep before it ages out.
+                  </li>
+                  <li className="bg-white p-2.5 rounded-lg border border-slate-200">
+                    <strong className="text-slate-900 block font-bold mb-0.5">3. Purge Now is immediate</strong>
+                    Applies the saved window right away instead of waiting for the next daily check.
+                  </li>
+                </ol>
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] text-slate-500">
+                  <strong className="text-slate-800">Note:</strong> Purging is permanent and cannot be undone.
                 </div>
               </div>
             </div>

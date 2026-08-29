@@ -1,9 +1,13 @@
+import csv
+import io
+import json
 import logging
 import os
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from backend.api.config import settings
@@ -90,6 +94,10 @@ async def upload_log(
             alerts.evaluate_batch_alerts(batch_id=summary.batch_id, events=events)
         except Exception:
             logger.exception("Alert evaluation failed for batch %s (ingestion itself succeeded)", summary.batch_id)
+        try:
+            alerts.evaluate_anomaly_rules(db)
+        except Exception:
+            logger.exception("Anomaly alert evaluation failed for batch %s (ingestion itself succeeded)", summary.batch_id)
 
     return summary.model_dump()
 
@@ -150,6 +158,10 @@ def ingest_directory(
                     alerts.evaluate_batch_alerts(batch_id=summary.batch_id, events=events)
                 except Exception:
                     logger.exception("Alert evaluation failed for batch %s", summary.batch_id)
+                try:
+                    alerts.evaluate_anomaly_rules(db)
+                except Exception:
+                    logger.exception("Anomaly alert evaluation failed for batch %s", summary.batch_id)
         except Exception as e:
             logger.exception("Failed to ingest %s during directory scan", f)
             errors.append(f"{f}: {e}")
@@ -187,6 +199,10 @@ def ingest_sample(
                     alerts.evaluate_batch_alerts(batch_id=summary.batch_id, events=events)
                 except Exception:
                     logger.exception("Alert evaluation failed for sample batch %s", summary.batch_id)
+                try:
+                    alerts.evaluate_anomaly_rules(db)
+                except Exception:
+                    logger.exception("Anomaly alert evaluation failed for sample batch %s", summary.batch_id)
     return {"ingested": summaries}
 
 
@@ -216,6 +232,67 @@ def get_events(
         date_to=date_to,
     )
     return {"events": events, "total": total, "page": page, "pageSize": pageSize}
+
+
+# Same cap as GET /events' own pageSize ceiling -- exporting the full
+# filtered result set (not just the visible page) is the point of this
+# endpoint, but it still needs a bound. The frontend already has `total`
+# from its own /events call and shows a "narrow your filters" notice
+# itself when it exceeds this, rather than the export silently truncating
+# with no indication anything was left out.
+EXPORT_MAX_ROWS = 5000
+
+_EXPORT_CSV_FIELDS = [
+    "event_id", "batch_id", "file_name", "line_no", "ts_utc", "ts_raw",
+    "ts_confidence", "level", "source_system", "component", "message", "raw", "attributes",
+]
+
+
+@router.get("/events/export")
+def export_events(
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    level: Optional[str] = None,
+    source_system: Optional[str] = None,
+    component: Optional[str] = None,
+    search_term: Optional[str] = None,
+    batch_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    _user: AuthenticatedUser = Depends(get_current_user),
+    db: DatabaseManager = Depends(get_db),
+):
+    events, total = db.query_events(
+        page=1,
+        page_size=EXPORT_MAX_ROWS,
+        level=level,
+        source_system=source_system,
+        component=component,
+        search_term=search_term,
+        batch_id=batch_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    if format == "json":
+        payload = {"events": events, "total": total, "exported": len(events)}
+        return Response(
+            content=json.dumps(payload, indent=2, default=str),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=llens-events.json"},
+        )
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=_EXPORT_CSV_FIELDS, extrasaction="ignore")
+    writer.writeheader()
+    for e in events:
+        row = dict(e)
+        row["attributes"] = json.dumps(row.get("attributes") or {}, default=str)
+        writer.writerow(row)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=llens-events.csv"},
+    )
 
 
 @router.get("/context/{event_id}")
