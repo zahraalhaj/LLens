@@ -1,0 +1,14 @@
+{
+  "name": "Standard Syslog",
+  "type": "regex",
+  "pattern": "^(?P<timestamp>[A-Za-z]{3}\\s+\\d+\\s+\\d{2}:\\d{2}:\\d{2})\\s+(?P<host>\\S+)\\s+(?P<component>[^\\[:]+)(?:\\[(?P<pid>\\d+)\\])?:\\s+(?P<message>.*)$",
+  "timestamp_field": "timestamp",
+  "timestamp_format": null,
+  "level_field": "level",
+  "component_field": "component",
+  "message_field": "message",
+  "source_system_field": "host",
+  "default_source_system": "syslog",
+  "timezone": "UTC",
+  "min_match_ratio": 0.85
+}

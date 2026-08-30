@@ -1,0 +1,18 @@
+{
+  "name": "Delimited CSV/TSV Log",
+  "type": "delimited",
+  "pattern": ",",
+  "timestamp_field": "timestamp",
+  "level_field": "level",
+  "component_field": "component",
+  "message_field": "message",
+  "default_source_system": "csv_export",
+  "delimiter_fields": [
+    "timestamp",
+    "level",
+    "component",
+    "message"
+  ],
+  "timezone": "UTC",
+  "min_match_ratio": 0.85
+}
