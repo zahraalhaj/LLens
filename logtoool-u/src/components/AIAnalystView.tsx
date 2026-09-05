@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { BrainCircuit, Sparkles, Send, AlertTriangle, ShieldCheck, ChevronDown, ChevronUp, History, RefreshCw } from 'lucide-react';
-import { AiAnalystAuditEntry, AnalystAnswer, EvidenceType } from '../types';
+import { BrainCircuit, Sparkles, Send, AlertTriangle, ShieldCheck, ShieldAlert, ChevronDown, ChevronUp, History, RefreshCw } from 'lucide-react';
+import {
+  AiAnalystAuditEntry,
+  AnalystAnswer,
+  EvidenceType,
+  ValidationMetricsResponse,
+  ValidationReasonClass,
+} from '../types';
 import { api, ApiError } from '../api';
+import { maskText, maskJsonString } from '../utils/maskSensitive';
+import { MaskedBadge } from './MaskedBadge';
 
 interface AIAnalystViewProps {
   ollamaAvailable: boolean;
@@ -54,10 +62,11 @@ const MetricsPanel: React.FC<{ metrics: Record<string, any> }> = ({ metrics }) =
       >
         {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
         Metrics (raw deterministic tool result)
+        <MaskedBadge className="ml-1" />
       </button>
       {open && (
         <pre className="mt-1.5 bg-slate-950 text-emerald-400 font-mono text-[10px] p-3 rounded-lg overflow-x-auto border border-slate-800 max-h-64">
-          {JSON.stringify(metrics, null, 2)}
+          {maskJsonString(metrics)}
         </pre>
       )}
     </div>
@@ -67,7 +76,7 @@ const MetricsPanel: React.FC<{ metrics: Record<string, any> }> = ({ metrics }) =
 const AnswerCard: React.FC<{ answer: AnalystAnswer }> = ({ answer }) => (
   <div className="space-y-3">
     <div className="flex items-start justify-between gap-3">
-      <p className="text-xs font-medium leading-relaxed flex-1">{answer.answer}</p>
+      <p className="text-xs font-medium leading-relaxed flex-1">{maskText(answer.answer)}</p>
       <span
         className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${CONFIDENCE_STYLES[answer.confidence] || CONFIDENCE_STYLES.LOW}`}
       >
@@ -78,7 +87,7 @@ const AnswerCard: React.FC<{ answer: AnalystAnswer }> = ({ answer }) => (
     {answer.unsupported && answer.limitation_explanation && (
       <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-amber-800">
         <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-        <span>{answer.limitation_explanation}</span>
+        <span>{maskText(answer.limitation_explanation)}</span>
       </div>
     )}
 
@@ -91,7 +100,7 @@ const AnswerCard: React.FC<{ answer: AnalystAnswer }> = ({ answer }) => (
             return (
               <div key={i} className={`text-[11px] rounded-lg border px-2.5 py-1.5 ${style.className}`}>
                 <span className="font-bold uppercase text-[9px] tracking-wide mr-1.5">{style.label}:</span>
-                {e.text}
+                {maskText(e.text)}
               </div>
             );
           })}
@@ -220,8 +229,258 @@ const AuditLogPanel: React.FC = () => {
   );
 };
 
+const REASON_CLASS_STYLES: Record<ValidationReasonClass, { label: string; className: string; hint: string }> = {
+  hallucination: {
+    label: 'Hallucination',
+    className: 'bg-rose-50 text-rose-700 border-rose-200',
+    hint: 'The model referenced an event id, source file, flow id or tool that does not exist. A rising rate here means it is losing its grounding.',
+  },
+  policy_violation: {
+    label: 'Policy',
+    className: 'bg-amber-50 text-amber-700 border-amber-200',
+    hint: 'Well-formed output that broke a content rule (forbidden claims, calling a pending flow failed, unsafe SQL). Rising means prompt/guardrail drift.',
+  },
+  malformed_output: {
+    label: 'Malformed',
+    className: 'bg-slate-100 text-slate-600 border-slate-300',
+    hint: 'The response was not usable JSON or shape at all. Rising usually points at a model/version/prompt-format problem rather than reasoning quality.',
+  },
+};
+
+const REASON_LABELS: Record<string, string> = {
+  unknown_event_id: 'Cited a non-existent event id',
+  unknown_source_file: 'Cited a non-existent source file',
+  unknown_flow_id: 'Cited a non-existent flow id',
+  unknown_tool: 'Invented a tool name',
+  forbidden_content: 'Forbidden content (fraud/intent/blame)',
+  pending_treated_as_failure: 'Called a pending flow a failure',
+  sql_failed_security_validation: 'Generated SQL failed the safety gate',
+  malformed_item: 'Item was not a JSON object',
+  invalid_role_type_or_empty_text: 'Invalid role/type or empty text',
+  malformed_json_response: 'Response was not usable JSON',
+  tool_parameter_mismatch: 'Tool parameters did not match the spec',
+};
+
+const pct = (fraction: number) => `${(fraction * 100).toFixed(1)}%`;
+
+/** Rejection rate coloured by severity, not by whether it is non-zero: a
+ *  low steady rejection rate is the gate working, not an incident. */
+const rateTone = (rate: number) =>
+  rate >= 0.25 ? 'text-rose-600' : rate >= 0.1 ? 'text-amber-600' : 'text-emerald-600';
+
+const ValidationMetricsPanel: React.FC = () => {
+  const [data, setData] = useState<ValidationMetricsResponse | null>(null);
+  const [lookbackHours, setLookbackHours] = useState(24 * 7);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMetrics = async (hours: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(
+        await api.get<ValidationMetricsResponse>(
+          `/api/ai-analyst/validation-metrics?lookback_hours=${hours}`
+        )
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Failed to load validation metrics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMetrics(lookbackHours);
+  }, [lookbackHours]);
+
+  const s = data?.summary;
+  // A day counts as a signal only once there is something to compare it
+  // against -- a single day of history cannot show a trend.
+  const trend = (() => {
+    if (!s || s.daily.length < 2) return null;
+    const latest = s.daily[s.daily.length - 1];
+    const prior = s.daily.slice(0, -1);
+    const priorResponses = prior.reduce((n, d) => n + d.responses, 0);
+    const priorRejected = prior.reduce((n, d) => n + d.responses_with_rejection, 0);
+    if (priorResponses === 0 || latest.responses === 0) return null;
+    return {
+      latestRate: latest.responses_with_rejection / latest.responses,
+      priorRate: priorRejected / priorResponses,
+    };
+  })();
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 font-bold text-xs text-slate-700 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-slate-500" />
+            AI Output Validation
+          </span>
+          <div className="flex items-center gap-2">
+            <select
+              value={lookbackHours}
+              onChange={(e) => setLookbackHours(Number(e.target.value))}
+              className="text-[11px] font-bold text-slate-600 bg-white border border-slate-200 rounded px-1.5 py-1 cursor-pointer"
+            >
+              <option value={24}>Last 24h</option>
+              <option value={24 * 7}>Last 7 days</option>
+              <option value={24 * 30}>Last 30 days</option>
+            </select>
+            <button
+              onClick={() => fetchMetrics(lookbackHours)}
+              disabled={loading}
+              className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 hover:text-blue-500 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div className="px-5 py-3 text-[11px] text-slate-500 leading-relaxed border-b border-slate-100">
+          Every AI response passes a validation gate that discards anything it cannot tie back to the
+          deterministic engine. Those discards are counted here. A low steady rate is the gate doing its job;
+          a <strong className="text-slate-700">rising</strong> rate — especially hallucinations — is the
+          earliest signal that model quality is degrading.
+        </div>
+
+        {error && <div className="px-5 py-4 text-xs text-rose-600">{error}</div>}
+        {!error && loading && !data && <div className="px-5 py-8 text-center text-xs text-slate-400">Loading…</div>}
+
+        {!error && s && s.responses_validated === 0 && (
+          <div className="px-5 py-8 text-center text-xs text-slate-400 italic">
+            No AI responses validated in this window yet.
+          </div>
+        )}
+
+        {!error && s && s.responses_validated > 0 && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-slate-100 border-b border-slate-100">
+              <div className="px-4 py-3">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Responses Checked</div>
+                <div className="text-xl font-bold text-slate-900 mt-0.5">{s.responses_validated}</div>
+              </div>
+              <div className="px-4 py-3">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rejection Rate</div>
+                <div className={`text-xl font-bold mt-0.5 ${rateTone(s.response_rejection_rate)}`}>
+                  {pct(s.response_rejection_rate)}
+                </div>
+                <div className="text-[10px] text-slate-400">{s.responses_with_rejection} responses affected</div>
+              </div>
+              <div className="px-4 py-3">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hallucinations</div>
+                <div className={`text-xl font-bold mt-0.5 ${s.hallucination_rejections > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {s.hallucination_rejections}
+                </div>
+                <div className="text-[10px] text-slate-400">fabricated ids / tools</div>
+              </div>
+              <div className="px-4 py-3">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Statements Dropped</div>
+                <div className="text-xl font-bold text-slate-900 mt-0.5">{s.items_rejected}</div>
+                <div className="text-[10px] text-slate-400">of {s.items_total} ({pct(s.item_rejection_rate)})</div>
+              </div>
+            </div>
+
+            {trend && (
+              <div
+                className={`px-5 py-2.5 text-[11px] font-semibold border-b border-slate-100 ${
+                  trend.latestRate > trend.priorRate ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                }`}
+              >
+                {trend.latestRate > trend.priorRate ? '▲' : '▼'} Latest day at {pct(trend.latestRate)} vs{' '}
+                {pct(trend.priorRate)} across the prior days in this window.
+              </div>
+            )}
+
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(REASON_CLASS_STYLES) as ValidationReasonClass[]).map((cls) => (
+                  <span
+                    key={cls}
+                    title={REASON_CLASS_STYLES[cls].hint}
+                    className={`text-[10px] font-bold px-2 py-1 rounded-full border ${REASON_CLASS_STYLES[cls].className}`}
+                  >
+                    {REASON_CLASS_STYLES[cls].label}: {s.by_class[cls] ?? 0}
+                  </span>
+                ))}
+              </div>
+
+              {Object.keys(s.by_reason).length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Why output was rejected</div>
+                  {Object.entries(s.by_reason).map(([reason, count]) => (
+                    <div key={reason} className="flex items-center gap-2 text-[11px]">
+                      <span className="text-slate-700 flex-1">{REASON_LABELS[reason] || reason}</span>
+                      <span className="font-mono font-bold text-slate-500">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {data && data.recent.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 font-bold text-xs text-slate-700 flex items-center gap-2">
+            Recent Rejections ({data.recent.length})
+            <MaskedBadge />
+          </div>
+          <div className="overflow-x-auto max-h-96">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-200 sticky top-0">
+                <tr>
+                  <th className="px-4 py-2">When</th>
+                  <th className="px-4 py-2">Gate</th>
+                  <th className="px-4 py-2">Class</th>
+                  <th className="px-4 py-2">Dropped</th>
+                  <th className="px-4 py-2">What the model got wrong</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.recent.map((r) => (
+                  <tr key={r.event_id}>
+                    <td className="px-4 py-2 font-mono text-slate-500 whitespace-nowrap">
+                      {r.occurred_at.slice(0, 19).replace('T', ' ')}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-slate-500">{r.surface}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {r.reason_classes.map((cls) => (
+                          <span
+                            key={cls}
+                            title={REASON_CLASS_STYLES[cls]?.hint}
+                            className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                              REASON_CLASS_STYLES[cls]?.className || ''
+                            }`}
+                          >
+                            {REASON_CLASS_STYLES[cls]?.label || cls}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-slate-600">
+                      {r.response_rejected ? 'whole response' : `${r.items_rejected}/${r.items_total}`}
+                    </td>
+                    <td className="px-4 py-2 text-slate-600 max-w-md truncate" title={r.sample || ''}>
+                      {r.sample ? maskText(r.sample) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const AIAnalystView: React.FC<AIAnalystViewProps> = ({ ollamaAvailable, isAdmin }) => {
-  const [viewMode, setViewMode] = useState<'ask' | 'audit'>('ask');
+  const [viewMode, setViewMode] = useState<'ask' | 'audit' | 'quality'>('ask');
   const [turns, setTurns] = useState<ConversationTurn[]>([]);
   const [inputQuestion, setInputQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
@@ -283,6 +542,14 @@ export const AIAnalystView: React.FC<AIAnalystViewProps> = ({ ollamaAvailable, i
             >
               Audit Log
             </button>
+            <button
+              onClick={() => setViewMode('quality')}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-bold cursor-pointer transition-colors ${
+                viewMode === 'quality' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              AI Quality
+            </button>
           </div>
         )}
 
@@ -313,6 +580,8 @@ export const AIAnalystView: React.FC<AIAnalystViewProps> = ({ ollamaAvailable, i
 
       {viewMode === 'audit' ? (
         <AuditLogPanel />
+      ) : viewMode === 'quality' ? (
+        <ValidationMetricsPanel />
       ) : (
         <>
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">

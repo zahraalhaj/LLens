@@ -25,6 +25,7 @@ from backend.api.deps import (
     get_ai_analyst_assistant,
     get_ai_analyst_audit_log,
     get_current_user,
+    get_llm_validation_metrics,
     get_db,
     get_profile_manager,
     require_admin,
@@ -33,6 +34,7 @@ from backend.auth.service import AuthenticatedUser
 from backend.core.store import DatabaseManager
 from backend.llm.ai_analyst import AIAnalystAssistant
 from backend.llm.audit import AIAnalystAuditLog
+from backend.llm.validation_metrics import LLMValidationMetrics
 
 router = APIRouter(prefix="/api/ai-analyst", tags=["ai-analyst"])
 
@@ -85,3 +87,26 @@ def get_audit_log(
     audit_log: AIAnalystAuditLog = Depends(get_ai_analyst_audit_log),
 ):
     return {"entries": audit_log.list_recent(limit=limit)}
+
+
+@router.get("/validation-metrics")
+def get_validation_metrics(
+    lookback_hours: int = Query(24 * 7, ge=1, le=24 * 365),
+    recent_limit: int = Query(25, ge=1, le=200),
+    _user: AuthenticatedUser = Depends(require_admin),
+    metrics: LLMValidationMetrics = Depends(get_llm_validation_metrics),
+):
+    """Hallucination / validation monitoring.
+
+    How often the validation gates rejected model output, split by reason
+    and by class (hallucination / policy_violation / malformed_output), with
+    a daily series so a rising trend is visible rather than just a lifetime
+    average. Admin-only: `recent` carries redacted excerpts of what the
+    model actually got wrong, which is diagnostic detail, not an answer.
+
+    See backend/llm/validation_metrics.py for what each reason means.
+    """
+    return {
+        "summary": metrics.summary(lookback_hours=lookback_hours),
+        "recent": metrics.list_recent(limit=recent_limit, rejections_only=True),
+    }

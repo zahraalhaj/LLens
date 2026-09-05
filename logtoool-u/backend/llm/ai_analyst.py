@@ -42,6 +42,12 @@ from backend.analysis.ai_analyst_schema import AnalystAnswer, AnalystStatement, 
 from backend.analysis.pipeline import AnalysisBundle
 from backend.analysis.query_tools import TOOL_PARAM_ALLOWLIST, TOOL_REGISTRY, TOOL_SPECS, result_has_no_evidence
 from backend.llm.client import OllamaClient
+from backend.llm.validation_metrics import (
+    LLMValidationMetrics,
+    RejectionReason,
+    Surface,
+    ValidationOutcome,
+)
 
 logger = logging.getLogger("logtool.llm.ai_analyst")
 
@@ -191,8 +197,20 @@ def _unsupported_answer(question: str, reason: str, ai_available: bool, status_m
 
 
 class AIAnalystAssistant:
-    def __init__(self, ollama_client: OllamaClient):
+    def __init__(
+        self,
+        ollama_client: OllamaClient,
+        validation_metrics: Optional[LLMValidationMetrics] = None,
+    ):
         self.client = ollama_client
+        # Optional so existing callers/tests constructing this with just a
+        # client keep working, and so the validation gates never depend on a
+        # database being reachable.
+        self.validation_metrics = validation_metrics
+
+    def _record_validation(self, outcome: ValidationOutcome) -> None:
+        if self.validation_metrics is not None:
+            self.validation_metrics.record(outcome, model_name=f"ollama:{self.client.model}")
 
     def ask(self, question: str, bundle: AnalysisBundle) -> AnalystAnswer:
         is_ok, status_msg = self.client.health_check()
@@ -221,14 +239,30 @@ class AIAnalystAssistant:
         prompt = f'User question: "{question}"\n\nSelect the tool now.'
         json_resp, err = self.client.generate_json(prompt, system_prompt=_TOOL_SELECTION_SYSTEM_PROMPT)
         if err or not isinstance(json_resp, dict):
+            outcome = ValidationOutcome(surface=Surface.ANALYST_TOOL_SELECTION)
+            outcome.reject_response(RejectionReason.MALFORMED_JSON_RESPONSE, err or "malformed response")
+            self._record_validation(outcome)
             return None, {}, f"AI tool-selection failed: {err or 'malformed response'}"
 
         tool_name = json_resp.get("tool")
         if tool_name is None:
+            # An honest "no tool fits this question" is a CORRECT response,
+            # not a rejection -- counted as accepted so declining to answer
+            # never looks like model degradation.
+            accepted = ValidationOutcome(surface=Surface.ANALYST_TOOL_SELECTION)
+            accepted.accept()
+            self._record_validation(accepted)
             return None, {}, json_resp.get("reason") or "No supported tool matches this question."
         if tool_name not in TOOL_REGISTRY:
             logger.warning("AI Analyst selected an unknown tool %r -- treating as unsupported.", tool_name)
+            outcome = ValidationOutcome(surface=Surface.ANALYST_TOOL_SELECTION)
+            outcome.reject_response(RejectionReason.UNKNOWN_TOOL, f"invented tool name: {tool_name!r}")
+            self._record_validation(outcome)
             return None, {}, "No supported tool matches this question."
+
+        accepted = ValidationOutcome(surface=Surface.ANALYST_TOOL_SELECTION)
+        accepted.accept()
+        self._record_validation(accepted)
 
         params = _sanitize_params(tool_name, json_resp.get("parameters"))
         return tool_name, params, None
@@ -239,6 +273,9 @@ class AIAnalystAssistant:
             return fn(bundle, **params), None
         except TypeError as e:
             logger.warning("AI Analyst tool call %s(%r) failed parameter validation: %s", tool_name, params, e)
+            outcome = ValidationOutcome(surface=Surface.ANALYST_TOOL_SELECTION)
+            outcome.reject_response(RejectionReason.TOOL_PARAMETER_MISMATCH, f"{tool_name}({params!r}): {e}")
+            self._record_validation(outcome)
             return None, f"Tool parameter mismatch for '{tool_name}': {e}"
 
     def _narrate(self, question: str, tool_name: str, params: dict, tool_result: dict) -> AnalystAnswer:
@@ -252,9 +289,17 @@ class AIAnalystAssistant:
         no_evidence = result_has_no_evidence(tool_name, tool_result)
 
         if err or not isinstance(json_resp, dict):
+            outcome = ValidationOutcome(surface=Surface.ANALYST_NARRATION)
+            outcome.reject_response(RejectionReason.MALFORMED_JSON_RESPONSE, err or "malformed response")
+            self._record_validation(outcome)
             return self._fallback_answer(question, tool_name, params, tool_result, no_evidence, f"AI narration failed: {err or 'malformed response'}")
 
-        evidence = self._validate_evidence(json_resp.get("evidence") or [], tool_result)
+        narration_accepted = ValidationOutcome(surface=Surface.ANALYST_NARRATION)
+        narration_accepted.accept()
+        self._record_validation(narration_accepted)
+
+        evidence, evidence_outcome = self._validate_evidence(json_resp.get("evidence") or [], tool_result)
+        self._record_validation(evidence_outcome)
         answer_text = (json_resp.get("answer") or "").strip() or self._fallback_answer_text(tool_result, no_evidence)
         confidence = json_resp.get("confidence")
         confidence = Confidence(confidence) if confidence in _VALID_CONFIDENCE else Confidence.MEDIUM
@@ -293,10 +338,18 @@ class AIAnalystAssistant:
         )
 
     def _validate_evidence(self, raw_items, tool_result: dict):
+        """Returns (validated_items, outcome). The outcome tallies what was
+        discarded and why, so the discard rate is observable instead of
+        living only in a logger.warning -- see
+        backend/llm/validation_metrics.py. What gets accepted is unchanged."""
         known_strings = _flatten_strings(tool_result)
         validated = []
+        outcome = ValidationOutcome(surface=Surface.ANALYST_EVIDENCE)
         for item in raw_items:
             if not isinstance(item, dict):
+                # Previously discarded with no log line at all -- the one
+                # rejection path in this file that was fully silent.
+                outcome.reject(RejectionReason.MALFORMED_ITEM, repr(item))
                 continue
             evidence_type = item.get("evidence_type")
             text = (item.get("text") or "").strip()
@@ -305,18 +358,23 @@ class AIAnalystAssistant:
 
             if evidence_type not in _VALID_EVIDENCE_TYPES or not text:
                 logger.warning("Discarding AI Analyst evidence with invalid type/empty text: %r", item)
+                outcome.reject(RejectionReason.INVALID_ROLE_TYPE_OR_EMPTY_TEXT, repr(item))
                 continue
             if not set(event_ids) <= known_strings:
                 logger.warning("Discarding AI Analyst evidence citing unknown event id(s): %s", event_ids)
+                outcome.reject(RejectionReason.UNKNOWN_EVENT_ID, f"cited event ids {event_ids}: {text}")
                 continue
             if not set(flow_ids) <= known_strings:
                 logger.warning("Discarding AI Analyst evidence citing unknown flow id(s): %s", flow_ids)
+                outcome.reject(RejectionReason.UNKNOWN_FLOW_ID, f"cited flow ids {flow_ids}: {text}")
                 continue
             violation = _violates_forbidden_content(text)
             if violation:
                 logger.warning("Discarding AI Analyst evidence (%s): %r", violation, text)
+                outcome.reject(RejectionReason.FORBIDDEN_CONTENT, f"{violation}: {text}")
                 continue
 
+            outcome.accept()
             validated.append(
                 AnalystStatement(
                     evidence_type=EvidenceType(evidence_type),
@@ -325,7 +383,7 @@ class AIAnalystAssistant:
                     flow_ids=list(flow_ids),
                 )
             )
-        return validated
+        return validated, outcome
 
     def _fallback_answer_text(self, tool_result: dict, no_evidence: bool) -> str:
         if no_evidence:

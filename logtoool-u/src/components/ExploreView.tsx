@@ -5,6 +5,8 @@ import { api, ApiError } from '../api';
 import { useConfirm } from './ConfirmDialog';
 import { useUrlState } from '../hooks/useUrlState';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { maskText, maskJsonString } from '../utils/maskSensitive';
+import { MaskedBadge } from './MaskedBadge';
 
 interface SavedSearch {
   id: string;
@@ -167,6 +169,13 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
     // Content-Disposition: attachment means the browser downloads the
     // response instead of navigating away -- no need for a JS fetch/Blob
     // dance, and the session cookie rides along automatically.
+    //
+    // NOTE: this download is served by the backend straight from the DB and
+    // does NOT pass through utils/maskSensitive -- the exported file carries
+    // the original unmasked values. That is deliberate for now (the export
+    // exists to hand a complete evidence file to another system), but it
+    // means display masking is not by itself a data-egress control; see the
+    // export button's tooltip.
     window.location.href = `/api/logs/events/export?${params}`;
   };
 
@@ -313,7 +322,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
             </div>
             <button
               onClick={() => handleExport('csv')}
-              title="Export the current filtered results as CSV"
+              title="Export the current filtered results as CSV. Exported files contain the ORIGINAL unmasked values -- on-screen masking does not apply to downloads."
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition-all cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
@@ -321,7 +330,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
             </button>
             <button
               onClick={() => handleExport('json')}
-              title="Export the current filtered results as JSON"
+              title="Export the current filtered results as JSON. Exported files contain the ORIGINAL unmasked values -- on-screen masking does not apply to downloads."
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition-all cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
@@ -473,7 +482,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                             {evt.component}
                           </td>
                           <td className="px-3.5 py-2.5 text-slate-900 truncate max-w-[280px]">
-                            {evt.message}
+                            {maskText(evt.message)}
                           </td>
                           <td className="px-3.5 py-2.5 text-right">
                             <button className="text-blue-600 hover:text-blue-800 p-1">
@@ -545,7 +554,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                   </span>
                 </div>
                 <div className="text-xs font-bold text-slate-900 break-words font-mono">
-                  {selectedEvent.message}
+                  {maskText(selectedEvent.message)}
                 </div>
               </div>
 
@@ -586,13 +595,13 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                   <div className="pt-3 border-t border-slate-800 space-y-2.5 text-xs">
                     <div className="bg-slate-800/80 p-2.5 rounded-lg border border-slate-700">
                       <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">Probable Cause</div>
-                      <div className="font-semibold text-slate-100">{aiExplanation.probable_cause}</div>
+                      <div className="font-semibold text-slate-100">{maskText(aiExplanation.probable_cause)}</div>
                     </div>
 
                     <div className="space-y-1">
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Technical Explanation</div>
                       <div className="text-slate-300 text-[11px] leading-relaxed bg-slate-950 p-2.5 rounded border border-slate-800">
-                        {aiExplanation.explanation}
+                        {maskText(aiExplanation.explanation)}
                       </div>
                     </div>
 
@@ -602,7 +611,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                         {aiExplanation.suggested_next_steps.map((step, idx) => (
                           <li key={idx} className="flex items-start gap-1.5 text-[11px] text-slate-200 bg-slate-800/40 p-1.5 rounded">
                             <span className="text-emerald-400 font-bold">•</span>
-                            <span>{step}</span>
+                            <span>{maskText(step)}</span>
                           </li>
                         ))}
                       </ul>
@@ -613,16 +622,20 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
 
               {/* Raw JSON Attributes */}
               <div>
-                <div className="text-xs font-bold text-slate-700 mb-1">Parsed JSON Fields</div>
+                <div className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+                  Parsed JSON Fields
+                  <MaskedBadge />
+                </div>
                 <pre className="bg-slate-950 text-slate-200 text-[11px] p-3 rounded-lg overflow-x-auto font-mono max-h-40">
-                  {JSON.stringify(selectedEvent, null, 2)}
+                  {maskJsonString(selectedEvent)}
                 </pre>
               </div>
 
               {/* Surrounding Raw Log Context */}
               <div>
-                <div className="text-xs font-bold text-slate-700 mb-1">
+                <div className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                   Surrounding Raw Log Context (±5 Lines)
+                  <MaskedBadge />
                 </div>
                 <div className="bg-slate-950 rounded-lg p-3 font-mono text-[11px] text-slate-300 space-y-1.5 max-h-48 overflow-y-auto border border-slate-800">
                   {contextEvents.map((ctx) => {
@@ -635,7 +648,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({ sources, components, o
                         }`}
                       >
                         <span className="text-slate-500 mr-2">Line {ctx.line_no}</span>
-                        <span>{ctx.raw}</span>
+                        <span>{maskText(ctx.raw)}</span>
                       </div>
                     );
                   })}

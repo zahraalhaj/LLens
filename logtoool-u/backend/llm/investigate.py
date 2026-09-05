@@ -28,6 +28,12 @@ from backend.analysis.investigation_schema import (
     StatementType,
 )
 from backend.llm.client import OllamaClient
+from backend.llm.validation_metrics import (
+    LLMValidationMetrics,
+    RejectionReason,
+    Surface,
+    ValidationOutcome,
+)
 
 logger = logging.getLogger("logtool.llm.investigate")
 
@@ -128,15 +134,21 @@ def _violates_pending_as_failure(text: str, final_status: Optional[str]) -> bool
 def _validate_statements(
     raw_statements: List[dict],
     case: InvestigationCase,
-) -> List[NarrativeStatement]:
+) -> Tuple[List[NarrativeStatement], ValidationOutcome]:
     """Never trusts the LLM's output at face value -- every statement is
     checked against the deterministic facts and either accepted as-is or
     discarded outright. Discarding (not attempting to "fix" the text) is
     deliberate: a statement that fabricated an event ID or made a
-    forbidden claim can't be trusted to have gotten the rest right either."""
+    forbidden claim can't be trusted to have gotten the rest right either.
+
+    Also returns a ValidationOutcome tallying what was discarded and why,
+    so the discard rate is observable instead of living only in a
+    logger.warning nobody reads (see backend/llm/validation_metrics.py).
+    The tally is a pure by-product -- what gets accepted is unchanged."""
     known_event_ids = _known_event_ids(case)
     known_source_files = _known_source_files(case)
     validated: List[NarrativeStatement] = []
+    outcome = ValidationOutcome(surface=Surface.INVESTIGATE_NARRATIVE)
 
     for item in raw_statements:
         role = item.get("role")
@@ -147,20 +159,25 @@ def _validate_statements(
 
         if role not in _VALID_ROLES or statement_type not in _VALID_TYPES or not text:
             logger.warning("Discarding AI narrative statement with invalid role/type/empty text: %r", item)
+            outcome.reject(RejectionReason.INVALID_ROLE_TYPE_OR_EMPTY_TEXT, repr(item))
             continue
         if not set(evidence_event_ids) <= known_event_ids:
             logger.warning("Discarding AI narrative statement citing unknown event id(s): %s", evidence_event_ids)
+            outcome.reject(RejectionReason.UNKNOWN_EVENT_ID, f"cited event ids {evidence_event_ids}: {text}")
             continue
         if not set(source_files) <= known_source_files:
             logger.warning("Discarding AI narrative statement citing unknown source file(s): %s", source_files)
+            outcome.reject(RejectionReason.UNKNOWN_SOURCE_FILE, f"cited source files {source_files}: {text}")
             continue
 
         violation = _violates_forbidden_content(text)
         if violation:
             logger.warning("Discarding AI narrative statement (%s): %r", violation, text)
+            outcome.reject(RejectionReason.FORBIDDEN_CONTENT, f"{violation}: {text}")
             continue
         if _violates_pending_as_failure(text, case.case_summary.final_status):
             logger.warning("Discarding AI narrative statement calling PENDING_AT_LOG_END a failure: %r", text)
+            outcome.reject(RejectionReason.PENDING_TREATED_AS_FAILURE, text)
             continue
         if case.correlation.is_conflict and role in ("where_flow_stopped", "technical_boundary") and "CORRELATION CONFLICT" not in text:
             # Not a hard discard -- other roles don't need the phrase, and
@@ -168,6 +185,7 @@ def _validate_statements(
             # explain_flow() regardless of what the model produced here.
             pass
 
+        outcome.accept()
         validated.append(
             NarrativeStatement(
                 role=NarrativeRole(role),
@@ -178,7 +196,7 @@ def _validate_statements(
             )
         )
 
-    return validated
+    return validated, outcome
 
 
 def _mandatory_deterministic_statements(case: InvestigationCase) -> List[NarrativeStatement]:
@@ -217,8 +235,20 @@ def _has_role(statements: List[NarrativeStatement], role: NarrativeRole) -> bool
 
 
 class InvestigationAssistant:
-    def __init__(self, ollama_client: OllamaClient):
+    def __init__(
+        self,
+        ollama_client: OllamaClient,
+        validation_metrics: Optional[LLMValidationMetrics] = None,
+    ):
         self.client = ollama_client
+        # Optional so existing callers/tests that construct this with just a
+        # client keep working, and so the validation gate itself never
+        # depends on a database being reachable.
+        self.validation_metrics = validation_metrics
+
+    def _record_validation(self, outcome: ValidationOutcome) -> None:
+        if self.validation_metrics is not None:
+            self.validation_metrics.record(outcome, model_name=f"ollama:{self.client.model}")
 
     def explain_flow(
         self,
@@ -244,12 +274,16 @@ class InvestigationAssistant:
         json_resp, err = self.client.generate_json(prompt, system_prompt=_SYSTEM_PROMPT)
 
         if err or not json_resp or not isinstance(json_resp.get("statements"), list):
+            rejected = ValidationOutcome(surface=Surface.INVESTIGATE_NARRATIVE)
+            rejected.reject_response(RejectionReason.MALFORMED_JSON_RESPONSE, err or "malformed response")
+            self._record_validation(rejected)
             case.case_summary.narrative = mandatory
             case.ai_available = False
             case.ai_status_message = f"AI narrative generation failed: {err or 'malformed response'}"
             return case, case.ai_status_message
 
-        validated = _validate_statements(json_resp["statements"], case)
+        validated, outcome = _validate_statements(json_resp["statements"], case)
+        self._record_validation(outcome)
 
         # Guarantee compliance with the hard rules regardless of what the
         # model actually produced -- never rely on prompt-following alone.

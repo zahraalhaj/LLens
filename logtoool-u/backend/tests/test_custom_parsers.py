@@ -119,3 +119,103 @@ def test_full_ingestion_pipeline_routes_to_custom_parser(tmp_path):
     events, total = db.query_events(page=1, page_size=10)
     assert total == 2
     assert events[0]["source_system"] == "asbb_mw_credit_portal"
+
+
+# --- ILA Bank application log parser -----------------------------------------
+# Serilog-style abbreviated levels, a multi-line stack trace, an embedded JSON
+# payload and an explicit duration -- none of which the ASBB MW parser (which
+# claims the same ISO-timestamp header shape) has a branch for.
+ILA_BANK_SAMPLE = (
+    "2026-08-27 09:10:02.451 +00:00 [INF] Log Tracker No: TRK-9001 => "
+    "PaymentService: begin posting, ReqRef=REQ-77, TranReference=778451, host=10.20.30.40:8443\n"
+    "2026-08-27 09:10:02.900 +00:00 [ERR] Log Tracker No: TRK-9001 => "
+    "Core adapter call failed: System.Net.Http.HttpRequestException (500) Internal Server Error\n"
+    "   at Afs.Core.Adapter.PostAsync(String url) in C:\\src\\Adapter.cs:line 142\n"
+    "2026-08-27 09:10:03.120 +00:00 [INF] Log Tracker No: TRK-9001 => "
+    'Retry 1 scheduled, payload {"amount": 500.0, "currency": "USD"}\n'
+    "2026-08-27 09:10:04.000 +00:00 [INF] End of request, duration 00:00:01.549\n"
+)
+
+ILA_BANK_NAME = "ILA Bank Application Log (Tracker + Byte-Exact Capture)"
+
+
+def test_ila_bank_wins_iso_bracket_logs_that_asbb_mw_has_no_branch_for():
+    profile, warnings = reg.detect_custom_parser(ILA_BANK_SAMPLE)
+    assert profile is not None
+    assert profile.name == ILA_BANK_NAME
+    # ASBB MW's detect() matches the header shape too, so the ambiguity is
+    # real and must be surfaced rather than silently resolved.
+    assert len(warnings) == 1
+    assert "Multiple custom parsers matched" in warnings[0]
+
+
+def test_ila_bank_defers_when_the_sample_carries_asbb_mw_case_markers():
+    # ASBB_MW_CREDIT_SAMPLE has both an "Inputs (...)" call and "Warrning" --
+    # ASBB MW decodes those into structure, so the ILA Bank parser must not
+    # claim the file and drag it into a field-yield tie-break.
+    from backend.custom_parsers import parser_ILA_Bank
+    assert parser_ILA_Bank.detect(ASBB_MW_CREDIT_SAMPLE) is False
+    assert parser_ILA_Bank.detect(ILA_BANK_SAMPLE) is True
+    # Nothing resembling a timestamp+[LEVEL] header at all.
+    assert parser_ILA_Bank.detect(ABCE_DEBIT_SAMPLE) is False
+
+
+def test_ila_bank_run_preserves_stack_trace_json_and_abbreviated_levels(tmp_path):
+    profile = reg.get_custom_profile_by_name(ILA_BANK_NAME)
+    log_path = tmp_path / "ila_bank.log"
+    log_path.write_text(ILA_BANK_SAMPLE)
+
+    from datetime import datetime, timezone
+    events = reg.run_custom_parser(
+        profile=profile,
+        file_path=str(log_path),
+        batch_id="batch-3",
+        file_name="ila_bank.log",
+        upload_time=datetime.now(timezone.utc),
+    )
+
+    assert len(events) == 4
+
+    # [INF]/[ERR] are Serilog spellings the shared normalize_level() maps to
+    # UNKNOWN; the adapter's alias table is what makes them real severities.
+    assert events[0].level == "INFO"
+    assert events[1].level == "ERROR"
+
+    first = events[0].attributes["details"]
+    assert events[0].attributes["correlation_id"] == "TRK-9001"
+    assert first["transaction_ids"]["TranReference"] == ["778451"]
+    assert first["ip_addresses"][0] == {"ip": "10.20.30.40", "port": 8443, "original": "10.20.30.40:8443"}
+
+    # The continuation line belongs to the ERROR entry, not a record of its own.
+    err = events[1].attributes["details"]
+    assert err["exceptions"] == ["System.Net.Http.HttpRequestException"]
+    assert err["status_codes"][0]["code"] == 500
+    assert err["stack_frames"][0]["line"] == "142"
+    assert "at Afs.Core.Adapter.PostAsync" in events[1].raw
+
+    assert events[2].attributes["details"]["embedded_json"] == [{"amount": 500.0, "currency": "USD"}]
+
+    # Untracked line: no tracker to correlate on, but the duration is kept.
+    assert events[3].attributes["correlation_id"] is None
+    assert events[3].attributes["details"]["durations"][0]["milliseconds"] == 1549
+
+
+def test_ila_bank_keeps_original_timestamp_text_alongside_the_normalized_one():
+    """The whole point of this parser: normalization is additive, never a
+    replacement for what the file actually said."""
+    from backend.custom_parsers import parser_ILA_Bank
+    import tempfile, os
+
+    with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False, encoding="utf-8") as tf:
+        tf.write(ILA_BANK_SAMPLE)
+        path = tf.name
+    try:
+        records = parser_ILA_Bank.parse_log_file(path)
+    finally:
+        os.unlink(path)
+
+    assert records[0]["timestamp"] == "2026-08-27 09:10:02.451 +00:00"
+    assert records[0]["details"]["timestamp_normalized"] == "2026-08-27T09:10:02.451000+00:00"
+    assert records[0]["details"]["timestamp_precision_digits"] == 3
+    # Concatenating every record's raw block reproduces the source exactly.
+    assert "".join(r["_raw_block"] for r in records) == ILA_BANK_SAMPLE

@@ -1,17 +1,18 @@
 import React, { Suspense, lazy, useState } from 'react';
-import { Activity, KeyRound, CreditCard, ShieldQuestion, Smartphone, Globe2, type LucideIcon } from 'lucide-react';
+import { Activity, KeyRound, CreditCard, ShieldQuestion, Smartphone, Globe2, Landmark, type LucideIcon } from 'lucide-react';
 import { VPlusMonitoringView } from './VPlusMonitoringView';
 import { OtpProcessorView } from './OtpProcessorView';
 import { DebitPortalView } from './DebitPortalView';
 import { CardinalView } from './CardinalView';
 import { VFlexView } from './VFlexView';
+import { IlaBankView } from './IlaBankView';
 
 // Lazy-loaded: pulls in three.js/globe.gl (~700kB), which every other tab
 // on this page has no use for -- code-split so it's only fetched when
 // someone actually opens the Currency Globe tab.
 const CurrencyGlobeView = lazy(() => import('./CurrencyGlobeView').then((m) => ({ default: m.CurrencyGlobeView })));
 
-type PaymentTab = 'vplus' | 'otp-processor' | 'debit-portal' | 'cardinal' | 'vflex' | 'currency-globe';
+type PaymentTab = 'vplus' | 'otp-processor' | 'debit-portal' | 'cardinal' | 'vflex' | 'ila-bank' | 'currency-globe';
 
 const TABS: { id: PaymentTab; label: string; icon: LucideIcon }[] = [
   { id: 'vplus', label: 'V+ Monitoring', icon: Activity },
@@ -19,6 +20,7 @@ const TABS: { id: PaymentTab; label: string; icon: LucideIcon }[] = [
   { id: 'debit-portal', label: 'Debit Portal', icon: CreditCard },
   { id: 'cardinal', label: 'Cardinal', icon: ShieldQuestion },
   { id: 'vflex', label: 'VFlex', icon: Smartphone },
+  { id: 'ila-bank', label: 'ILA Bank', icon: Landmark },
   { id: 'currency-globe', label: 'Currency Globe', icon: Globe2 },
 ];
 
@@ -51,6 +53,7 @@ export const PaymentMonitoringView: React.FC = () => {
       {tab === 'debit-portal' && <DebitPortalView />}
       {tab === 'cardinal' && <CardinalView />}
       {tab === 'vflex' && <VFlexView />}
+      {tab === 'ila-bank' && <IlaBankView />}
       {tab === 'currency-globe' && (
         <Suspense
           fallback={

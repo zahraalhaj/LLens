@@ -806,3 +806,170 @@ export interface AiAnalystAuditEntry {
   engine_version: string;
   ai_available: boolean;
 }
+
+/**
+ * Hallucination / validation monitoring -- how often the LLM validation
+ * gates rejected model output. Mirrors
+ * GET /api/ai-analyst/validation-metrics (backend/llm/validation_metrics.py).
+ */
+export type ValidationReasonClass = 'hallucination' | 'policy_violation' | 'malformed_output';
+
+export interface ValidationDailyPoint {
+  day: string;
+  responses: number;
+  responses_with_rejection: number;
+  rejections: number;
+  hallucination: number;
+  policy_violation: number;
+  malformed_output: number;
+}
+
+export interface ValidationSurfaceStats {
+  responses: number;
+  responses_with_rejection: number;
+  items_total: number;
+  items_rejected: number;
+}
+
+export interface ValidationMetricsSummary {
+  lookback_hours: number;
+  responses_validated: number;
+  responses_with_rejection: number;
+  responses_fully_rejected: number;
+  /** 0-1 fraction, not a percentage. */
+  response_rejection_rate: number;
+  items_total: number;
+  items_rejected: number;
+  item_rejection_rate: number;
+  hallucination_rejections: number;
+  by_reason: Record<string, number>;
+  by_class: Record<ValidationReasonClass, number>;
+  by_surface: Record<string, ValidationSurfaceStats>;
+  daily: ValidationDailyPoint[];
+}
+
+export interface ValidationRejectionEntry {
+  event_id: string;
+  occurred_at: string;
+  surface: string;
+  model_name: string;
+  items_total: number;
+  items_accepted: number;
+  items_rejected: number;
+  response_rejected: boolean;
+  reason_counts: Record<string, number>;
+  reason_classes: ValidationReasonClass[];
+  /** Redacted excerpt of what the model got wrong -- may be null. */
+  sample: string | null;
+}
+
+export interface ValidationMetricsResponse {
+  summary: ValidationMetricsSummary;
+  recent: ValidationRejectionEntry[];
+}
+
+/**
+ * ILA Bank application-log dashboard.
+ * Mirrors GET /api/ila/summary (backend/analysis/ila_bank.py).
+ */
+export interface IlaSeverityPoint {
+  bucket: string;
+  error: number;
+  warn: number;
+  info: number;
+}
+
+export interface IlaDurationBucket {
+  label: string;
+  count: number;
+}
+
+export interface IlaDurationStats {
+  count: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+  max_ms: number | null;
+  buckets: IlaDurationBucket[];
+}
+
+/**
+ * What was thrown, paired with where it was thrown. Two independent
+ * frequency tables (exceptions, stack frames) cannot answer "which
+ * exception came from which call" -- this pairing can, so it is what the
+ * dashboard leads with.
+ */
+export interface IlaFailureSignature {
+  exception: string;
+  exception_namespace: string | null;
+  method: string | null;
+  owner: string | null;
+  count: number;
+  /** 0-1 share of all error entries carrying an exception. */
+  share: number;
+}
+
+export interface IlaTracker {
+  tracker_id: string;
+  entries: number;
+  errors: number;
+  warnings: number;
+  first_timestamp: string | null;
+  last_timestamp: string | null;
+  span_ms: number | null;
+  event_types: string[];
+  exceptions: string[];
+}
+
+export interface IlaErrorItem {
+  timestamp: string | null;
+  tracker_id: string;
+  message: string;
+  exceptions: string[];
+  http_codes: (number | null)[];
+}
+
+/**
+ * The endpoint returns one of two shapes. Modelling them as a discriminated
+ * union (rather than one interface with optional fields) is what makes
+ * TypeScript force a `status === 'ok'` check before any metric is read --
+ * the earlier single-interface version declared every field required and
+ * let `report.duration_stats.buckets` compile against a `no_data` response
+ * that carries neither.
+ */
+export interface IlaNoData {
+  status: 'no_data';
+  message: string;
+}
+
+export interface IlaReport {
+  status: 'ok';
+  window_start: string | null;
+  window_end: string | null;
+  total_events_analyzed: number;
+  total_trackers: number;
+  untracked_events: number;
+  error_count: number;
+  warning_count: number;
+  /** 0-1 fraction, not a percentage. */
+  error_rate: number;
+  trackers_with_errors: number;
+  multiline_entries: number;
+  sensitive_field_entries: number;
+  level_counts: Record<string, number>;
+  event_type_counts: Record<string, number>;
+  parse_status_counts: Record<string, number>;
+  /** 'hour' for windows up to 2 days, 'day' beyond -- keeps bars readable. */
+  severity_granularity: 'hour' | 'day';
+  severity_timeline: IlaSeverityPoint[];
+  top_exceptions: Record<string, number>;
+  top_stack_frames: Record<string, number>;
+  failure_signatures: IlaFailureSignature[];
+  headline_failure: IlaFailureSignature | null;
+  top_services: Record<string, number>;
+  http_status_counts: Record<string, number>;
+  duration_stats: IlaDurationStats;
+  trackers: IlaTracker[];
+  recent_errors: IlaErrorItem[];
+}
+
+export type IlaSummary = IlaNoData | IlaReport;

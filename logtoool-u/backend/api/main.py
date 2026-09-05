@@ -36,6 +36,7 @@ from backend.api.routes import (
     profiles,
     settings as settings_routes,
     users,
+    ila_bank,
     vflex,
     vplus_monitoring,
 )
@@ -150,6 +151,7 @@ app.include_router(vplus_monitoring.router)
 app.include_router(otp_processor.router)
 app.include_router(debit_portal.router)
 app.include_router(cardinal.router)
+app.include_router(ila_bank.router)
 app.include_router(vflex.router)
 app.include_router(currency_map.router)
 app.include_router(analytics.router)

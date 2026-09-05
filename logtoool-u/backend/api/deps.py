@@ -23,6 +23,7 @@ from backend.core.profiles import ProfileManager
 from backend.core.store import DatabaseManager
 from backend.llm.ai_analyst import AIAnalystAssistant
 from backend.llm.audit import AIAnalystAuditLog
+from backend.llm.validation_metrics import LLMValidationMetrics
 from backend.llm.chat import LogChatAssistant
 from backend.llm.client import OllamaClient
 from backend.llm.explain import LogExplainer
@@ -73,12 +74,24 @@ def get_explainer() -> LogExplainer:
 
 @lru_cache
 def get_chat_assistant() -> LogChatAssistant:
-    return LogChatAssistant(db_manager=get_db(), ollama_client=get_ollama_client())
+    return LogChatAssistant(
+        db_manager=get_db(),
+        ollama_client=get_ollama_client(),
+        validation_metrics=get_llm_validation_metrics(),
+    )
+
+
+@lru_cache
+def get_llm_validation_metrics() -> LLMValidationMetrics:
+    return LLMValidationMetrics(db_path=settings.db_path)
 
 
 @lru_cache
 def get_ai_analyst_assistant() -> AIAnalystAssistant:
-    return AIAnalystAssistant(ollama_client=get_ollama_client())
+    return AIAnalystAssistant(
+        ollama_client=get_ollama_client(),
+        validation_metrics=get_llm_validation_metrics(),
+    )
 
 
 @lru_cache

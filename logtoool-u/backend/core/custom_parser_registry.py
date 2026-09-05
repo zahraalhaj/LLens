@@ -29,6 +29,7 @@ from backend.custom_parsers import (
     parser_ASBB_MW_Credit,
     parser_Cardinal,
     parser_Debit_Transaction,
+    parser_ILA_Bank,
     parser_OTP_Processor,
     parser_VFlex,
 )
@@ -54,6 +55,11 @@ _MODULES: Dict[str, Any] = {
     "debit_portal_log": parser_Debit_Transaction,
     "cardinal": parser_Cardinal,
     "vflex": parser_VFlex,
+    # Registered last: its detect() is the broadest here (any ISO-8601 +
+    # bracketed-level header), so on the ambiguous samples it deliberately
+    # does claim, being last means the field-yield tie-break decides on
+    # merit rather than it winning on dict-insertion order.
+    "ila_bank": parser_ILA_Bank,
 }
 
 

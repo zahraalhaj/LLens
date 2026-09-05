@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { MessageSquareCode, Sparkles, Send, Database, AlertTriangle } from 'lucide-react';
 import { ChatMessage } from '../types';
+import { maskText, maskDeep } from '../utils/maskSensitive';
+import { MaskedBadge } from './MaskedBadge';
 import { api, ApiError } from '../api';
 
 interface ChatViewProps {
@@ -158,7 +160,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ ollamaAvailable }) => {
               <span className="text-[10px] opacity-70 font-mono">{msg.timestamp}</span>
             </div>
 
-            <p className="text-xs font-medium leading-relaxed">{msg.text}</p>
+            <p className="text-xs font-medium leading-relaxed">{maskText(msg.text)}</p>
 
             {msg.sql_query && (
               <div className="space-y-1 pt-2">
@@ -173,8 +175,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ ollamaAvailable }) => {
 
             {msg.results && msg.results.length > 0 && (
               <div className="space-y-1.5 pt-2">
-                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   Matching Rows ({msg.results.length})
+                  <MaskedBadge />
                 </div>
                 <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-x-auto max-h-48">
                   <table className="w-full text-left text-[11px]">
@@ -189,7 +192,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ ollamaAvailable }) => {
                       {msg.results.slice(0, 10).map((r, i) => (
                         <tr key={i}>
                           {resultColumns(msg.results!).map((col) => (
-                            <td key={col} className="p-2 truncate max-w-xs">{String(r[col] ?? '')}</td>
+                            <td key={col} className="p-2 truncate max-w-xs">
+                              {String(maskDeep({ [col]: r[col] ?? '' })[col])}
+                            </td>
                           ))}
                         </tr>
                       ))}

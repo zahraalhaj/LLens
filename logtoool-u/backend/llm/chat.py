@@ -11,6 +11,12 @@ import logging
 
 from backend.core.store import DatabaseManager
 from backend.llm.client import OllamaClient
+from backend.llm.validation_metrics import (
+    LLMValidationMetrics,
+    RejectionReason,
+    Surface,
+    ValidationOutcome,
+)
 
 logger = logging.getLogger("logtool.llm.chat")
 
@@ -69,9 +75,20 @@ def validate_and_sanitize_sql(raw_sql: str) -> Tuple[bool, str, str]:
 
 
 class LogChatAssistant:
-    def __init__(self, db_manager: DatabaseManager, ollama_client: OllamaClient):
+    def __init__(
+        self,
+        db_manager: DatabaseManager,
+        ollama_client: OllamaClient,
+        validation_metrics: Optional[LLMValidationMetrics] = None,
+    ):
         self.db_manager = db_manager
         self.client = ollama_client
+        # Optional -- see AIAnalystAssistant.__init__ for the reasoning.
+        self.validation_metrics = validation_metrics
+
+    def _record_validation(self, outcome: ValidationOutcome) -> None:
+        if self.validation_metrics is not None:
+            self.validation_metrics.record(outcome, model_name=f"ollama:{self.client.model}")
 
     def answer_natural_language_query(
         self,
@@ -127,7 +144,17 @@ RULES:
         # Validate SQL
         is_valid, clean_sql, val_err = validate_and_sanitize_sql(raw_llm_out)
         if not is_valid:
+            # The model wrote SQL the safety gate refused. Counted, not just
+            # returned as an error string, because a rising rate here is the
+            # model drifting toward unsafe queries -- worth seeing as a trend.
+            outcome = ValidationOutcome(surface=Surface.CHAT_SQL)
+            outcome.reject_response(RejectionReason.SQL_FAILED_SECURITY_VALIDATION, val_err)
+            self._record_validation(outcome)
             return None, None, None, f"Generated SQL failed security validation: {val_err}"
+
+        accepted = ValidationOutcome(surface=Surface.CHAT_SQL)
+        accepted.accept()
+        self._record_validation(accepted)
 
         # Execute Query Read-Only
         raw_results: List[Dict[str, Any]] = []
