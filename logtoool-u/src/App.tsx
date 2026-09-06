@@ -18,6 +18,7 @@ import { SettingsView } from './components/SettingsView';
 import { UsersView } from './components/UsersView';
 import { ControlCenterView } from './components/ControlCenterView';
 import { ConfirmProvider } from './components/ConfirmDialog';
+import { DateRangeProvider } from './components/DateRangeFilter';
 import { ParserProfile, LogStats, DrillThroughTarget } from './types';
 import { api } from './api';
 
@@ -198,7 +199,9 @@ export default function App() {
   return (
     <ConfirmProvider>
       <AuthProvider>
-        <AppRoot />
+        <DateRangeProvider>
+          <AppRoot />
+        </DateRangeProvider>
       </AuthProvider>
     </ConfirmProvider>
   );

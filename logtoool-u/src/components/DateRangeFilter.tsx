@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 
 export interface DateRangeValue {
@@ -28,6 +28,26 @@ export function toIsoRange(value: DateRangeValue): { dateFrom: string; dateTo: s
     dateFrom: `${value.fromDate}T${fromTime}:00Z`,
     dateTo: `${value.toDate}T${toTime}:59Z`,
   };
+}
+
+// One date range shared by every analysis page (Payment Rail Monitoring,
+// Cross-Log Analytics, ILA Bank, Currency Globe) so picking a range on one
+// carries over when the user switches tabs, instead of each page silently
+// resetting to "today". Each page still owns its own fetch timing -- this
+// only shares the *value*.
+const DateRangeContext = createContext<{ range: DateRangeValue; setRange: (value: DateRangeValue) => void } | null>(null);
+
+export const DateRangeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [range, setRange] = useState<DateRangeValue>(defaultRange());
+  return <DateRangeContext.Provider value={{ range, setRange }}>{children}</DateRangeContext.Provider>;
+};
+
+export function useSharedDateRange(): [DateRangeValue, (value: DateRangeValue) => void] {
+  const ctx = useContext(DateRangeContext);
+  if (!ctx) {
+    throw new Error('useSharedDateRange must be used within a DateRangeProvider');
+  }
+  return [ctx.range, ctx.setRange];
 }
 
 interface DateRangeFilterProps {

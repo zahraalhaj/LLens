@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { CardinalSummary } from '../types';
-import { DateRangeFilter, DateRangeValue, defaultRange, toIsoRange } from './DateRangeFilter';
+import { DateRangeFilter, DateRangeValue, toIsoRange, useSharedDateRange } from './DateRangeFilter';
 import { MerchantFilter } from './MerchantFilter';
 
 const PALETTE = ['#052460', '#036FD0', '#00AEEF', '#04ADA4', '#8892A1', '#3C4B72', '#54C029', '#FF8800', '#2A2F34', '#64748b'];
@@ -28,14 +28,19 @@ const fmtTime = (iso?: string | null) => (iso ? iso.slice(0, 19).replace('T', ' 
 
 const toChartData = (record: Record<string, number> | undefined, limit?: number) => {
   const entries = Object.entries(record || {}).sort((a, b) => b[1] - a[1]);
-  return (limit ? entries.slice(0, limit) : entries).map(([name, value]) => ({ name, value }));
+  if (!limit || entries.length <= limit) {
+    return entries.map(([name, value]) => ({ name, value }));
+  }
+  const top = entries.slice(0, limit).map(([name, value]) => ({ name, value }));
+  const otherTotal = entries.slice(limit).reduce((sum, [, value]) => sum + value, 0);
+  return [...top, { name: `Other (${entries.length - limit})`, value: otherTotal }];
 };
 
 export const CardinalView: React.FC = () => {
   const [report, setReport] = useState<CardinalSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<DateRangeValue>(defaultRange());
+  const [range, setRange] = useSharedDateRange();
   const [merchant, setMerchant] = useState('');
   const [availableMerchants, setAvailableMerchants] = useState<string[]>([]);
 
@@ -85,36 +90,25 @@ export const CardinalView: React.FC = () => {
     );
   }
 
-  const header = (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-xl shadow-2xs">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-          <ShieldQuestion className="w-5 h-5 text-blue-600" />
-          Cardinal Analytics
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Issuer, authentication status, OOB status, and bank-org distribution for the Cardinal OTP/StepUp/OOB log stream.
-        </p>
-      </div>
-      <div className="flex items-end gap-3">
-        <DateRangeFilter value={range} onChange={setRange} />
-        <MerchantFilter value={merchant} onChange={setMerchant} options={availableMerchants} />
-        <button
-          onClick={() => fetchReport(range, merchant)}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 mb-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
+  const filterBar = (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-2xs px-4 py-3 flex flex-wrap items-end gap-3">
+      <DateRangeFilter value={range} onChange={setRange} />
+      <MerchantFilter value={merchant} onChange={setMerchant} options={availableMerchants} />
+      <button
+        onClick={() => fetchReport(range, merchant)}
+        disabled={loading}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      >
+        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        {loading ? 'Loading…' : 'Apply'}
+      </button>
     </div>
   );
 
   if (report.status !== 'ok') {
     return (
       <div className="space-y-6">
-        {header}
+        {filterBar}
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
           <Info className="w-8 h-8 text-slate-400 mx-auto mb-2" />
           <p className="text-sm font-medium text-slate-500">{report.message || 'No Cardinal activity found in this window.'}</p>
@@ -123,11 +117,11 @@ export const CardinalView: React.FC = () => {
     );
   }
 
-  const statusData = toChartData(report.by_status);
-  const issuerData = toChartData(report.by_issuer);
-  const oobStatusData = toChartData(report.oob_status_counts);
-  const bankOrgData = toChartData(report.by_bank_org);
-  const currencyData = toChartData(report.by_currency);
+  const statusData = toChartData(report.by_status, 5);
+  const issuerData = toChartData(report.by_issuer, 8);
+  const oobStatusData = toChartData(report.oob_status_counts, 5);
+  const bankOrgData = toChartData(report.by_bank_org, 8);
+  const currencyData = toChartData(report.by_currency, 5);
   const merchantData = toChartData(report.top_merchants);
   const failedReasonData = toChartData(report.failed_events?.reason_counts);
   const failedItems = report.failed_events?.items || [];
@@ -135,7 +129,7 @@ export const CardinalView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {header}
+      {filterBar}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">
@@ -193,7 +187,6 @@ export const CardinalView: React.FC = () => {
                     innerRadius={60}
                     outerRadius={90}
                     paddingAngle={3}
-                    label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
                   >
                     {statusData.map((entry, i) => (
                       <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || PALETTE[i % PALETTE.length]} />
@@ -227,7 +220,6 @@ export const CardinalView: React.FC = () => {
                     innerRadius={60}
                     outerRadius={90}
                     paddingAngle={3}
-                    label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
                   >
                     {oobStatusData.map((entry, i) => (
                       <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || PALETTE[i % PALETTE.length]} />
@@ -308,7 +300,6 @@ export const CardinalView: React.FC = () => {
                   innerRadius={60}
                   outerRadius={90}
                   paddingAngle={3}
-                  label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
                 >
                   {currencyData.map((entry, i) => (
                     <Cell key={entry.name} fill={PALETTE[i % PALETTE.length]} />

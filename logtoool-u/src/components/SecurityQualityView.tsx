@@ -4,7 +4,7 @@ import { ShieldCheck, RefreshCw, ShieldAlert, Repeat, FileWarning } from 'lucide
 import { api, ApiError } from '../api';
 import { DrillThroughTarget, SecurityQuality } from '../types';
 import { BRAND } from '../theme';
-import { DateRangeFilter, DateRangeValue, defaultRange, toIsoRange } from './DateRangeFilter';
+import { DateRangeFilter, DateRangeValue, toIsoRange, useSharedDateRange } from './DateRangeFilter';
 
 const tooltipStyle = { backgroundColor: BRAND.slate900, borderRadius: 8, border: 'none', color: '#fff', fontSize: 12 };
 
@@ -23,7 +23,7 @@ export const SecurityQualityView: React.FC<Props> = ({ onInvestigate }) => {
   const [data, setData] = useState<SecurityQuality | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<DateRangeValue>(defaultRange());
+  const [range, setRange] = useSharedDateRange();
 
   const fetchData = async (r: DateRangeValue) => {
     setLoading(true);
@@ -70,25 +70,16 @@ export const SecurityQualityView: React.FC<Props> = ({ onInvestigate }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-xl shadow-2xs">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-blue-600" />
-            Security / Data Quality
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">Is there enough reliable evidence to trust these conclusions?</p>
-        </div>
-        <div className="flex items-end gap-3">
-          <DateRangeFilter value={range} onChange={setRange} />
-          <button
-            onClick={() => fetchData(range)}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 mb-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs px-4 py-3 flex flex-wrap items-end gap-3">
+        <DateRangeFilter value={range} onChange={setRange} />
+        <button
+          onClick={() => fetchData(range)}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Loading…' : 'Apply'}
+        </button>
       </div>
 
       {/* Scorecard */}

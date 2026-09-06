@@ -24,6 +24,7 @@ from backend.analysis.normalized_schema import (
     mask_mobile,
 )
 from backend.core.currency import resolve_currency_code
+from backend.core.org_names import label_for_org
 
 DEFAULT_SOURCE_SYSTEM = "cardinal_stepup_oob_log"
 
@@ -79,7 +80,7 @@ def compute_cardinal_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         by_issuer[flow.get("issuer_id") or "UNKNOWN"] += 1
         auth = flow.get("authentication") or {}
         by_status[auth.get("status") or flow.get("integrity_status") or "UNKNOWN"] += 1
-        by_bank_org[flow.get("bank_org") or "UNKNOWN"] += 1
+        by_bank_org[label_for_org(flow.get("bank_org"))] += 1
         by_currency[resolve_currency_code((flow.get("transaction") or {}).get("currency")) or "UNKNOWN"] += 1
         by_merchant[(flow.get("merchant") or {}).get("name") or "UNKNOWN"] += 1
         for status_value in (flow.get("oob") or {}).get("status_history") or []:

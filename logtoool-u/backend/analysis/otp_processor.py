@@ -27,6 +27,7 @@ from backend.analysis.normalized_schema import (
     mask_mobile,
 )
 from backend.core.currency import resolve_currency_code
+from backend.core.org_names import label_for_org
 
 # Matches parser_OTP_Processor.py's DEFAULT_SOURCE_SYSTEM -- kept here too
 # (not imported from the parser module) so this analysis module has no
@@ -84,7 +85,7 @@ def compute_otp_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     force_verify_count = 0
 
     for record in records_by_tracker.values():
-        by_org[record.get("org") or "UNKNOWN"] += 1
+        by_org[label_for_org(record.get("org"))] += 1
         by_queue[record.get("queue") or "UNKNOWN"] += 1
         by_currency[resolve_currency_code((record.get("transaction") or {}).get("currency")) or "UNKNOWN"] += 1
         by_merchant[record.get("merchant") or "UNKNOWN"] += 1

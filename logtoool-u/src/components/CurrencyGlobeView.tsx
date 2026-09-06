@@ -3,7 +3,7 @@ import Globe, { type GlobeMethods } from 'react-globe.gl';
 import { Globe2, RefreshCw, Info, Coins, DollarSign } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { CurrencyGeoPoint, CurrencyMapSummary } from '../types';
-import { DateRangeFilter, DateRangeValue, defaultRange, toIsoRange } from './DateRangeFilter';
+import { DateRangeFilter, DateRangeValue, toIsoRange, useSharedDateRange } from './DateRangeFilter';
 
 const PALETTE = ['#036FD0', '#54C029', '#FF8800', '#CC1F1F', '#8A4FE0', '#04ADA4', '#FF4FA0', '#F2C744', '#3C4B72', '#00AEEF'];
 
@@ -49,7 +49,7 @@ export const CurrencyGlobeView: React.FC = () => {
   const [report, setReport] = useState<CurrencyMapSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<DateRangeValue>(defaultRange());
+  const [range, setRange] = useSharedDateRange();
   const [hovered, setHovered] = useState<RenderPoint | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
 
@@ -119,35 +119,24 @@ export const CurrencyGlobeView: React.FC = () => {
     [selectedCurrency]
   );
 
-  const header = (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-xl shadow-2xs">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-          <Globe2 className="w-5 h-5 text-blue-600" />
-          Global Currency Map
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Transaction currency distribution by country, combined across Cardinal, VFlex, Debit Portal, OTP Processor, and AFS/Netcetera.
-        </p>
-      </div>
-      <div className="flex items-end gap-3">
-        <DateRangeFilter value={range} onChange={setRange} />
-        <button
-          onClick={() => fetchReport(range)}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 mb-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
+  const filterBar = (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-2xs px-4 py-3 flex flex-wrap items-end gap-3">
+      <DateRangeFilter value={range} onChange={setRange} />
+      <button
+        onClick={() => fetchReport(range)}
+        disabled={loading}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      >
+        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        {loading ? 'Loading…' : 'Apply'}
+      </button>
     </div>
   );
 
   if (loading && !report) {
     return (
       <div className="space-y-6">
-        {header}
+        {filterBar}
         <div className="flex flex-col items-center justify-center h-96 text-slate-400">
           <Globe2 className="w-10 h-10 animate-pulse text-blue-500 mb-3" />
           <p className="text-sm font-medium">Charting global currency activity…</p>
@@ -159,7 +148,7 @@ export const CurrencyGlobeView: React.FC = () => {
   if (error || !report) {
     return (
       <div className="space-y-6">
-        {header}
+        {filterBar}
         <div className="p-6 bg-rose-50 border border-rose-200 rounded-xl text-rose-800">
           <p className="font-semibold text-sm">Failed to load currency map data</p>
           <p className="text-xs text-rose-600 mt-1">{error}</p>
@@ -177,7 +166,7 @@ export const CurrencyGlobeView: React.FC = () => {
   if (report.status !== 'ok') {
     return (
       <div className="space-y-6">
-        {header}
+        {filterBar}
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center">
           <Info className="w-8 h-8 text-slate-400 mx-auto mb-2" />
           <p className="text-sm font-medium text-slate-500">{report.message || 'No currency activity found in this window.'}</p>
@@ -190,7 +179,7 @@ export const CurrencyGlobeView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {header}
+      {filterBar}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">

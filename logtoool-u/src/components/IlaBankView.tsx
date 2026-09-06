@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { IlaReport, IlaSummary, IlaTracker } from '../types';
-import { DateRangeFilter, DateRangeValue, defaultRange, toIsoRange } from './DateRangeFilter';
+import { DateRangeFilter, DateRangeValue, toIsoRange, useSharedDateRange } from './DateRangeFilter';
 import { maskText } from '../utils/maskSensitive';
 import { MaskedBadge } from './MaskedBadge';
 
@@ -647,7 +647,7 @@ export const IlaBankView: React.FC = () => {
   const [report, setReport] = useState<IlaSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<DateRangeValue>(defaultRange());
+  const [range, setRange] = useSharedDateRange();
   const [trackerFilter, setTrackerFilter] = useState('');
   const [appliedTracker, setAppliedTracker] = useState('');
 

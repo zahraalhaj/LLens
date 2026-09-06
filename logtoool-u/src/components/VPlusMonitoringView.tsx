@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '../api';
 import { VPlusFullReport } from '../types';
-import { DateRangeFilter, DateRangeValue, defaultRange, toIsoRange } from './DateRangeFilter';
+import { DateRangeFilter, DateRangeValue, toIsoRange, useSharedDateRange } from './DateRangeFilter';
 import { MerchantFilter } from './MerchantFilter';
 
 const PALETTE = ['#052460', '#54C029', '#FF8800', '#CC1F1F', '#3C4B72', '#2398C9', '#04ADA4', '#2A2F34', '#FF8800', '#8892A1'];
@@ -23,8 +23,15 @@ const STATUS_COLORS: Record<string, string> = {
 
 const tooltipStyle = { backgroundColor: '#15171A', borderRadius: '8px', border: 'none', color: '#fff', fontSize: '12px' };
 
-const toChartData = (record: Record<string, number> | undefined) =>
-  Object.entries(record || {}).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value }));
+const toChartData = (record: Record<string, number> | undefined, limit?: number) => {
+  const entries = Object.entries(record || {}).sort((a, b) => b[1] - a[1]);
+  if (!limit || entries.length <= limit) {
+    return entries.map(([name, value]) => ({ name, value }));
+  }
+  const top = entries.slice(0, limit).map(([name, value]) => ({ name, value }));
+  const otherTotal = entries.slice(limit).reduce((sum, [, value]) => sum + value, 0);
+  return [...top, { name: `Other (${entries.length - limit})`, value: otherTotal }];
+};
 
 const SEVERITY_STYLES: Record<string, string> = {
   critical: 'bg-rose-50 text-rose-800 border-rose-300',
@@ -47,7 +54,7 @@ export const VPlusMonitoringView: React.FC = () => {
   const [report, setReport] = useState<VPlusFullReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<DateRangeValue>(defaultRange());
+  const [range, setRange] = useSharedDateRange();
   const [merchant, setMerchant] = useState('');
   const [availableMerchants, setAvailableMerchants] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -109,9 +116,9 @@ export const VPlusMonitoringView: React.FC = () => {
   }
 
   const { availability: avail, response_times: rt, sms_analysis: sms, investigation_summary: inv, transaction_breakdown: txBreakdown } = report;
-  const statusCountsData = toChartData(txBreakdown?.status_counts);
+  const statusCountsData = toChartData(txBreakdown?.status_counts, 5);
   const issuerCountsData = toChartData(txBreakdown?.issuer_counts);
-  const currencyCountsData = toChartData(txBreakdown?.currency_counts);
+  const currencyCountsData = toChartData(txBreakdown?.currency_counts, 5);
 
   const statusColor =
     avail.status === 'healthy' ? 'text-emerald-600' : avail.status === 'down' ? 'text-rose-600' : 'text-slate-400';
@@ -120,28 +127,17 @@ export const VPlusMonitoringView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 p-5 rounded-xl shadow-2xs">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-blue-600" />
-            V+ / StepUp Monitoring
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Availability, response times, SMS OTP flow, and investigation-focused correlation for the AFS/Netcetera 3DS StepUp log stream.
-          </p>
-        </div>
-        <div className="flex items-end gap-3">
-          <DateRangeFilter value={range} onChange={setRange} />
-          <MerchantFilter value={merchant} onChange={setMerchant} options={availableMerchants} />
-          <button
-            onClick={() => fetchReport(range, merchant)}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 mb-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-        </div>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-2xs px-4 py-3 flex flex-wrap items-end gap-3">
+        <DateRangeFilter value={range} onChange={setRange} />
+        <MerchantFilter value={merchant} onChange={setMerchant} options={availableMerchants} />
+        <button
+          onClick={() => fetchReport(range, merchant)}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Loading…' : 'Apply'}
+        </button>
       </div>
 
       <div className={`rounded-xl border p-5 ${statusBg}`}>
@@ -368,7 +364,6 @@ export const VPlusMonitoringView: React.FC = () => {
                       innerRadius={60}
                       outerRadius={90}
                       paddingAngle={3}
-                      label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
                     >
                       {statusCountsData.map((entry, i) => (
                         <Cell key={entry.name} fill={STATUS_COLORS[entry.name] || PALETTE[i % PALETTE.length]} />
@@ -427,7 +422,6 @@ export const VPlusMonitoringView: React.FC = () => {
                     innerRadius={60}
                     outerRadius={90}
                     paddingAngle={3}
-                    label={(props: any) => `${props.name}: ${((props.percent || 0) * 100).toFixed(0)}%`}
                   >
                     {currencyCountsData.map((entry, i) => (
                       <Cell key={entry.name} fill={PALETTE[i % PALETTE.length]} />
